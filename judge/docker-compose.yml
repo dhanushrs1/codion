@@ -1,0 +1,72 @@
+# ============================================================================
+# Codion Judge Service Stack
+# ----------------------------------------------------------------------------
+# This compose file provisions the code execution plane:
+# - Judge0 API server (receives submissions)
+# - Judge0 workers (process queued jobs)
+# - Redis (job queue)
+# - PostgreSQL (Judge0 metadata store; required for practical operation)
+#
+# Keep this stack isolated from the main API service. The API forwards payloads
+# to this network and never executes code itself.
+# ============================================================================
+
+services:
+  # Redis queue backing Judge0 async job processing.
+  redis:
+    image: redis:7-alpine
+    container_name: codion-judge-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - judge_redis_data:/data
+
+  # PostgreSQL used by Judge0 for persistence.
+  postgres:
+    image: postgres:16-alpine
+    container_name: codion-judge-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: judge0
+      POSTGRES_USER: judge0
+      POSTGRES_PASSWORD: judge0
+    volumes:
+      - judge_postgres_data:/var/lib/postgresql/data
+
+  # Judge0 HTTP API entrypoint.
+  judge0-server:
+    image: judge0/judge0:latest
+    container_name: codion-judge-server
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - postgres
+    ports:
+      - "2358:2358"
+    environment:
+      # Connection strings for internal service-to-service communication.
+      DATABASE_URL: postgres://judge0:judge0@postgres:5432/judge0
+      REDIS_URL: redis://redis:6379
+      RAILS_ENV: production
+    # First-run database prepare, then run the web server.
+    command: >
+      bash -lc "bundle exec rails db:prepare &&
+      bundle exec rails s -p 2358 -b 0.0.0.0"
+
+  # Judge0 worker processes pull jobs from Redis and execute in sandbox.
+  judge0-workers:
+    image: judge0/judge0:latest
+    container_name: codion-judge-workers
+    restart: unless-stopped
+    depends_on:
+      - judge0-server
+    environment:
+      DATABASE_URL: postgres://judge0:judge0@postgres:5432/judge0
+      REDIS_URL: redis://redis:6379
+      RAILS_ENV: production
+    command: >
+      bash -lc "bundle exec sidekiq"
+
+volumes:
+  judge_redis_data:
+  judge_postgres_data:

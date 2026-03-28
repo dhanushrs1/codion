@@ -1,0 +1,21 @@
+# ============================================================================
+# Codion API Dependencies
+# ----------------------------------------------------------------------------
+# Keep this service stateless. Dependencies here support HTTP APIs, validation,
+# and secure service-to-service communication with the Judge0 network.
+# ============================================================================
+
+# FastAPI: high-performance API framework for Python.
+fastapi==0.116.1
+
+# Uvicorn ASGI server for local/dev/prod process hosting.
+uvicorn[standard]==0.35.0
+
+# Async HTTP client used to forward execution jobs to Judge0.
+httpx==0.28.1
+
+# Explicit pydantic pin for request/response schema validation.
+pydantic==2.11.4
+
+# Optional .env loading for local development ergonomics.
+python-dotenv==1.0.1
