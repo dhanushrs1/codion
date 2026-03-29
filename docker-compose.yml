@@ -2,7 +2,38 @@ services:
   # ==========================================
   # PLATFORM SERVICES
   # ==========================================
-  
+
+  # Backend (FastAPI)
+  api:
+    image: python:3.11-slim
+    container_name: codion-api
+    working_dir: /app
+    volumes:
+      - ./api:/app
+      - ./.env:/app/../.env:ro          # Mount root .env one level up so API discovers it
+    ports:
+      - "${API_PORT:-8000}:8000"
+    command: >
+      sh -c "pip install -r requirements.txt --quiet &&
+             uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+    environment:
+      # Override DATABASE_URL to use Docker MySQL — takes priority over .env value
+      DATABASE_URL: "mysql+aiomysql://${MYSQL_USER}:${MYSQL_PASSWORD}@codion-mysql:3306/${MYSQL_DATABASE}"
+      CORS_ORIGINS: "${CORS_ORIGINS}"
+      FRONTEND_URL: "${FRONTEND_URL}"
+      JWT_SECRET: "${JWT_SECRET}"
+      JWT_EXPIRE_MINUTES: "${JWT_EXPIRE_MINUTES:-60}"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET}"
+      GITHUB_CLIENT_ID: "${GITHUB_CLIENT_ID}"
+      GITHUB_CLIENT_SECRET: "${GITHUB_CLIENT_SECRET}"
+    networks:
+      - codion_net
+    depends_on:
+      codion-mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
   # Frontend Dev Server (React/Vite)
   client:
     image: node:20-alpine
@@ -12,30 +43,16 @@ services:
       - ./client:/app
     expose:
       - "5173"
-    command: sh -c "npm install && npm run dev"
+    command: sh -c "npm install && npm run dev -- --host"
     environment:
-      - CHOKIDAR_USEPOLLING=true
+      CHOKIDAR_USEPOLLING: "true"
+      # VITE_API_URL is intentionally left empty — the frontend detects the API
+      # host dynamically from window.location, so no URL is hardcoded.
     networks:
       - codion_net
+    restart: unless-stopped
 
-  # Backend Dev Server (FastAPI)
-  api:
-    image: python:3.11-alpine
-    container_name: codion-api
-    working_dir: /app
-    volumes:
-      - ./api:/app
-    ports:
-      - "8000:8000"
-    command: sh -c "pip install fastapi pydantic uvicorn[standard] python-dotenv && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
-    environment:
-      - CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost
-    networks:
-      - codion_net
-    depends_on:
-      - codion-mysql
-
-  # NGINX API Gateway
+  # NGINX — single public entry point on port 80
   gateway:
     image: nginx:alpine
     container_name: codion-gateway
@@ -45,42 +62,52 @@ services:
       - ./infra/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - api
+      - client
     networks:
       - codion_net
+    restart: unless-stopped
 
   # ==========================================
   # DATABASE SERVICES
   # ==========================================
 
-  # MySQL Database (Main app data)
   codion-mysql:
     image: mysql:8.0
     container_name: codion-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root_password_123
-      MYSQL_DATABASE: codion_db
-      MYSQL_USER: codion_user
-      MYSQL_PASSWORD: codion_password_123
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD}"
+      MYSQL_DATABASE: "${MYSQL_DATABASE}"
+      MYSQL_USER: "${MYSQL_USER}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD}"
     ports:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     networks:
       - codion_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
-  # phpMyAdmin (Web UI for MySQL)
   phpmyadmin:
     image: phpmyadmin:latest
     container_name: codion-phpmyadmin
     restart: unless-stopped
     environment:
       PMA_HOST: codion-mysql
-      MYSQL_ROOT_PASSWORD: root_password_123
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: "${MYSQL_ROOT_PASSWORD}"
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD}"
     ports:
-      - "8080:80" # Maps phpMyAdmin to localhost:8080
+      - "8080:80"
     depends_on:
-      - codion-mysql
+      codion-mysql:
+        condition: service_healthy
     networks:
       - codion_net
 
@@ -89,3 +116,4 @@ volumes:
 
 networks:
   codion_net:
+    driver: bridge

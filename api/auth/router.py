@@ -31,14 +31,17 @@ from auth.models import User
 from auth.schemas import AccessTokenResponse, CompleteProfileRequest, SetupTokenResponse
 
 # ---------------------------------------------------------------------------
-# OAuth App credentials — read strictly from environment
+# OAuth App credentials — use getenv so missing GitHub doesn't crash startup
 # ---------------------------------------------------------------------------
 
-GOOGLE_CLIENT_ID: str = os.environ["GOOGLE_CLIENT_ID"]
-GOOGLE_CLIENT_SECRET: str = os.environ["GOOGLE_CLIENT_SECRET"]
+GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
 
-GITHUB_CLIENT_ID: str = os.environ["GITHUB_CLIENT_ID"]
-GITHUB_CLIENT_SECRET: str = os.environ["GITHUB_CLIENT_SECRET"]
+GITHUB_CLIENT_ID: str = os.getenv("GITHUB_CLIENT_ID", "")
+GITHUB_CLIENT_SECRET: str = os.getenv("GITHUB_CLIENT_SECRET", "")
+
+# Frontend URL — where the browser is redirected after OAuth completes
+FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 
 # ---------------------------------------------------------------------------
@@ -64,37 +67,40 @@ def _github_callback_uri(request: Request) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Shared intercept logic
+# Shared intercept logic — always redirects browser to frontend
 # ---------------------------------------------------------------------------
+
+from urllib.parse import quote
 
 async def _handle_oauth_profile(
     email: str,
     full_name: str,
     provider: str,
     db: AsyncSession,
-) -> AccessTokenResponse | SetupTokenResponse:
+) -> RedirectResponse:
     """
-    Existing user  → permanent Access JWT.
-    New user       → short-lived Setup JWT (intercept).
-    DB record is NOT created here for new users.
+    Existing user  → redirect to frontend with access_token + status=active.
+    New user       → redirect to frontend with setup_token + status=pending_username.
+    The frontend /auth/callback page reads the query params and acts accordingly.
     """
     user = await db.scalar(select(User).where(User.email == email))
 
     if user:
         token = create_access_token(user.username, user.role)
-        return AccessTokenResponse(
-            access_token=token,
-            status="active",
-            role=user.role,
-            username=user.username,
-        )
+        params = urlencode({
+            "status": "active",
+            "token": token,
+            "role": user.role,
+            "username": user.username,
+        })
+        return RedirectResponse(f"{FRONTEND_URL}/auth/callback?{params}")
 
     setup_token = create_setup_token(email, full_name, provider)
-    return SetupTokenResponse(
-        setup_token=setup_token,
-        status="pending_username",
-        message="Select a unique username to complete your profile.",
-    )
+    params = urlencode({
+        "status": "pending_username",
+        "setup_token": setup_token,
+    })
+    return RedirectResponse(f"{FRONTEND_URL}/auth/callback?{params}")
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +114,8 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.get("/google/login", summary="Redirect to Google OAuth consent screen")
 async def google_login(request: Request) -> RedirectResponse:
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=503, detail="Google OAuth is not configured on this server.")
     params = urlencode({
         "client_id": GOOGLE_CLIENT_ID,
         "redirect_uri": _google_callback_uri(request),
@@ -124,39 +132,47 @@ async def google_callback(
     code: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
-) -> AccessTokenResponse | SetupTokenResponse:
-    async with httpx.AsyncClient() as client:
-        token_resp = await client.post(
-            "https://oauth2.googleapis.com/token",
-            data={
-                "code": code,
-                "client_id": GOOGLE_CLIENT_ID,
-                "client_secret": GOOGLE_CLIENT_SECRET,
-                "redirect_uri": _google_callback_uri(request),
-                "grant_type": "authorization_code",
-            },
-        )
-        token_resp.raise_for_status()
+) -> RedirectResponse:
+    try:
+        async with httpx.AsyncClient() as client:
+            token_resp = await client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "code": code,
+                    "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "redirect_uri": _google_callback_uri(request),
+                    "grant_type": "authorization_code",
+                },
+            )
+            token_resp.raise_for_status()
 
-        profile_resp = await client.get(
-            "https://www.googleapis.com/oauth2/v3/userinfo",
-            headers={"Authorization": f"Bearer {token_resp.json()['access_token']}"},
-        )
-        profile_resp.raise_for_status()
-        profile = profile_resp.json()
+            profile_resp = await client.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {token_resp.json()['access_token']}"},
+            )
+            profile_resp.raise_for_status()
+            profile = profile_resp.json()
 
-    email: str = profile.get("email", "")
-    if not email:
-        raise HTTPException(status_code=400, detail="Google did not return an email address.")
+        email: str = profile.get("email", "")
+        if not email:
+            raise HTTPException(status_code=400, detail="Google did not return an email address.")
 
-    full_name: str = profile.get("name", email.split("@")[0])
-    return await _handle_oauth_profile(email, full_name, "google", db)
+        full_name: str = profile.get("name", email.split("@")[0])
+        return await _handle_oauth_profile(email, full_name, "google", db)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        error_params = urlencode({"error": str(exc)})
+        return RedirectResponse(f"{FRONTEND_URL}/auth/callback?{error_params}")
 
 
 # ── GitHub ────────────────────────────────────────────────────────────────
 
 @router.get("/github/login", summary="Redirect to GitHub OAuth consent screen")
 async def github_login(request: Request) -> RedirectResponse:
+    if not GITHUB_CLIENT_ID:
+        raise HTTPException(status_code=503, detail="GitHub OAuth is not configured on this server.")
     params = urlencode({
         "client_id": GITHUB_CLIENT_ID,
         "redirect_uri": _github_callback_uri(request),
@@ -170,49 +186,54 @@ async def github_callback(
     code: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
-) -> AccessTokenResponse | SetupTokenResponse:
-    async with httpx.AsyncClient() as client:
-        token_resp = await client.post(
-            "https://github.com/login/oauth/access_token",
-            data={
-                "client_id": GITHUB_CLIENT_ID,
-                "client_secret": GITHUB_CLIENT_SECRET,
-                "code": code,
-                "redirect_uri": _github_callback_uri(request),
-            },
-            headers={"Accept": "application/json"},
-        )
-        token_resp.raise_for_status()
-        gh_token = token_resp.json().get("access_token", "")
-
-        if not gh_token:
-            raise HTTPException(status_code=400, detail="GitHub did not return an access token.")
-
-        gh_headers = {
-            "Authorization": f"Bearer {gh_token}",
-            "Accept": "application/vnd.github+json",
-        }
-
-        profile_resp = await client.get("https://api.github.com/user", headers=gh_headers)
-        profile_resp.raise_for_status()
-        profile = profile_resp.json()
-
-        # GitHub may hide email on profile; fetch from dedicated endpoint
-        email: str = profile.get("email") or ""
-        if not email:
-            emails_resp = await client.get("https://api.github.com/user/emails", headers=gh_headers)
-            emails_resp.raise_for_status()
-            primary = next(
-                (e for e in emails_resp.json() if e.get("primary") and e.get("verified")),
-                None,
+) -> RedirectResponse:
+    try:
+        async with httpx.AsyncClient() as client:
+            token_resp = await client.post(
+                "https://github.com/login/oauth/access_token",
+                data={
+                    "client_id": GITHUB_CLIENT_ID,
+                    "client_secret": GITHUB_CLIENT_SECRET,
+                    "code": code,
+                    "redirect_uri": _github_callback_uri(request),
+                },
+                headers={"Accept": "application/json"},
             )
-            email = primary["email"] if primary else ""
+            token_resp.raise_for_status()
+            gh_token = token_resp.json().get("access_token", "")
 
-    if not email:
-        raise HTTPException(status_code=400, detail="GitHub did not return a verified email address.")
+            if not gh_token:
+                raise HTTPException(status_code=400, detail="GitHub did not return an access token.")
 
-    full_name: str = profile.get("name") or profile.get("login", email.split("@")[0])
-    return await _handle_oauth_profile(email, full_name, "github", db)
+            gh_headers = {
+                "Authorization": f"Bearer {gh_token}",
+                "Accept": "application/vnd.github+json",
+            }
+
+            profile_resp = await client.get("https://api.github.com/user", headers=gh_headers)
+            profile_resp.raise_for_status()
+            profile = profile_resp.json()
+
+            email: str = profile.get("email") or ""
+            if not email:
+                emails_resp = await client.get("https://api.github.com/user/emails", headers=gh_headers)
+                emails_resp.raise_for_status()
+                primary = next(
+                    (e for e in emails_resp.json() if e.get("primary") and e.get("verified")),
+                    None,
+                )
+                email = primary["email"] if primary else ""
+
+        if not email:
+            raise HTTPException(status_code=400, detail="GitHub did not return a verified email address.")
+
+        full_name: str = profile.get("name") or profile.get("login", email.split("@")[0])
+        return await _handle_oauth_profile(email, full_name, "github", db)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        error_params = urlencode({"error": str(exc)})
+        return RedirectResponse(f"{FRONTEND_URL}/auth/callback?{error_params}")
 
 
 # ── Complete Profile ───────────────────────────────────────────────────────
@@ -225,13 +246,14 @@ async def github_callback(
 )
 async def complete_profile(
     payload: CompleteProfileRequest,
-    authorization: str = Header(...),
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> AccessTokenResponse:
-    # Validate Setup JWT
-    if not authorization.lower().startswith("bearer "):
-        raise HTTPException(status_code=401, detail="Bearer token required.")
-    claims = verify_setup_token(authorization[7:])
+    # Extract Authorization header directly from request — avoids FastAPI Header conflicts
+    auth_header = request.headers.get("authorization") or request.headers.get("Authorization") or ""
+    if not auth_header.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Bearer token required in Authorization header.")
+    claims = verify_setup_token(auth_header[7:])
 
     email: str = claims["email"]
     full_name: str = claims["full_name"]

@@ -59,3 +59,24 @@
 .nav-menu a:hover::after {
   width: 100%;
 }
+
+.nav-username {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-family: var(--font-code);
+}
+
+.nav-logout {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 4px 0;
+}
+
+.nav-logout:hover {
+  color: var(--state-error);
+}

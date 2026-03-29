@@ -1,40 +1,64 @@
 import { useState } from "react";
-import { X, Mail, Lock, User, ArrowRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { X, User, AtSign, ArrowRight, Loader2 } from "lucide-react";
+import { APP_ROUTES } from "../../../routes/paths.js";
+import { apiUrl } from "../../../shared/api.js";
 import "./AuthModal.css";
 
-// Views: 'LOGIN', 'REGISTER', 'FORGOT', 'RESET'
-export default function AuthModal({ isOpen, onClose, onAuthenticate, initialView = 'LOGIN' }) {
-  const [view, setView] = useState(initialView);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
+/*
+  Two internal views:
+    "PROVIDER"  — show Google / GitHub OAuth buttons (default)
+    "USERNAME"  — new-user intercept: ask for full name + username
+*/
+export default function AuthModal({ isOpen, onClose, onAuthenticate }) {
+  const navigate = useNavigate();
+
+  const [view, setView] = useState("PROVIDER");
+  const [setupToken, setSetupToken] = useState("");
+  const [username, setUsername] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (view === 'LOGIN' || view === 'REGISTER') {
-      // Mocking Role-Based Access visually
-      let role = "USER";
-      const checkEmail = email.toLowerCase();
-      if (checkEmail.includes("admin")) {
-        role = "ADMIN";
-      } else if (checkEmail.includes("editor")) {
-        role = "EDITOR";
-      }
-      onAuthenticate(role);
-    } else if (view === 'FORGOT') {
-      setView('RESET');
-    } else if (view === 'RESET') {
-      setView('LOGIN');
-    }
+  // ── OAuth redirect ───────────────────────────────────────────────────────
+  const handleOAuth = (provider) => {
+    window.location.href = apiUrl(`/auth/${provider}/login`);
   };
 
-  const resetState = (newView) => {
-    setView(newView);
-    setEmail("");
-    setPassword("");
-    setName("");
+  // ── Complete profile (intercept) ─────────────────────────────────────────
+  const handleCompleteProfile = async (e) => {
+    e.preventDefault();
+    if (!username.trim()) return;
+    setLoading(true);
+    setError("");
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/complete-profile`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${setupToken}`,
+        },
+        body: JSON.stringify({ username: username.trim() }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.detail ?? "Something went wrong. Please try again.");
+        return;
+      }
+
+      // Store token and propagate role to layout
+      localStorage.setItem("codion_token", data.access_token);
+      onAuthenticate(data.role.toUpperCase(), data.username);
+      onClose();
+      navigate(APP_ROUTES.frontendDashboard);
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -48,99 +72,97 @@ export default function AuthModal({ isOpen, onClose, onAuthenticate, initialView
           <div className="brand-mark">
             Cod<span style={{ color: "var(--accent-primary)" }}>ion</span>
           </div>
-          <h2>
-            {view === 'LOGIN' && "Welcome back"}
-            {view === 'REGISTER' && "Create an account"}
-            {view === 'FORGOT' && "Reset your password"}
-            {view === 'RESET' && "Secure new password"}
-          </h2>
-          <p>
-            {view === 'LOGIN' && "Sign in to access your structured curriculum."}
-            {view === 'REGISTER' && "Initialize your workspace and track your progress."}
-            {view === 'FORGOT' && "Enter your email to receive recovery instructions."}
-            {view === 'RESET' && "Complete the reset procedure for your account."}
-          </p>
+
+          {view === "PROVIDER" && (
+            <>
+              <h2>Join the platform</h2>
+              <p>Sign in or create an account using your preferred provider.</p>
+            </>
+          )}
+
+          {view === "USERNAME" && (
+            <>
+              <h2>One last step</h2>
+              <p>
+                Your identity was verified. Choose a unique username to activate
+                your workspace.
+              </p>
+            </>
+          )}
         </div>
 
-        <form className="modal-form" onSubmit={handleSubmit}>
-          {view === 'REGISTER' && (
+        {/* ── Provider selection view ── */}
+        {view === "PROVIDER" && (
+          <div className="modal-form">
+            <button
+              className="oauth-btn oauth-btn--google"
+              onClick={() => handleOAuth("google")}
+            >
+              {/* Google SVG icon */}
+              <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+              Continue with Google
+            </button>
+
+            <button
+              className="oauth-btn oauth-btn--github"
+              onClick={() => handleOAuth("github")}
+            >
+              {/* GitHub SVG icon */}
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+              </svg>
+              Continue with GitHub
+            </button>
+
+            {error && <div className="modal-error">{error}</div>}
+          </div>
+        )}
+
+        {/* ── Username intercept view ── */}
+        {view === "USERNAME" && (
+          <form className="modal-form" onSubmit={handleCompleteProfile}>
             <div className="input-group">
-              <label>Full Name</label>
+              <label>Username</label>
               <div className="input-wrapper">
-                <User size={18} className="input-icon" />
+                <AtSign size={18} className="input-icon" />
                 <input
                   type="text"
-                  placeholder="Engineering Student"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. devraj_23"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_\-]/g, ""))}
+                  maxLength={64}
                   required
+                  autoFocus
                 />
               </div>
+              <span className="input-hint">
+                3–64 characters. Letters, numbers, _ and - only. Cannot be changed later.
+              </span>
             </div>
-          )}
 
-          {(view === 'LOGIN' || view === 'REGISTER' || view === 'FORGOT') && (
-             <div className="input-group">
-               <label>Email Address</label>
-               <div className="input-wrapper">
-                 <Mail size={18} className="input-icon" />
-                 <input
-                   type="email"
-                   placeholder="coder@university.edu (Type 'admin' for Admin)"
-                   value={email}
-                   onChange={(e) => setEmail(e.target.value)}
-                   required
-                 />
-               </div>
-             </div>
-          )}
+            {error && <div className="modal-error">{error}</div>}
 
-          {(view === 'LOGIN' || view === 'REGISTER' || view === 'RESET') && (
-            <div className="input-group">
-              <label>{view === 'RESET' ? "New Password" : "Password"}</label>
-              <div className="input-wrapper">
-                <Lock size={18} className="input-icon" />
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
-              {view === 'LOGIN' && (
-                <div className="forgot-link" onClick={() => resetState('FORGOT')}>
-                  Forgot password?
-                </div>
+            <button
+              type="submit"
+              className="btn btn-brand modal-submit"
+              disabled={loading || username.length < 3}
+            >
+              {loading ? (
+                <><Loader2 size={16} className="spin" /> Activating...</>
+              ) : (
+                <>Activate Workspace <ArrowRight size={16} /></>
               )}
-            </div>
-          )}
-
-          <button type="submit" className="btn btn-brand modal-submit">
-            {view === 'LOGIN' && "Sign In"}
-            {view === 'REGISTER' && "Initialize Workspace"}
-            {view === 'FORGOT' && "Send Reset Link"}
-            {view === 'RESET' && "Confirm New Password"}
-            <ArrowRight size={16} />
-          </button>
-        </form>
+            </button>
+          </form>
+        )}
 
         <div className="modal-footer">
-          {view === 'LOGIN' && (
-             <span>
-               Don't have an account? <a onClick={() => resetState('REGISTER')}>Create Workspace</a>
-             </span>
-          )}
-          {view === 'REGISTER' && (
-             <span>
-               Already have access? <a onClick={() => resetState('LOGIN')}>Sign In safely</a>
-             </span>
-          )}
-          {(view === 'FORGOT' || view === 'RESET') && (
-             <span>
-               <a onClick={() => resetState('LOGIN')}>Return to Sign In</a>
-             </span>
-          )}
+          <span>By continuing you agree to Codion's Terms of Service.</span>
         </div>
       </div>
     </div>

@@ -22,8 +22,14 @@ python-dotenv==1.0.1
 # Async SQLAlchemy ORM.
 sqlalchemy[asyncio]==2.0.41
 
-# Async SQLite driver (swap for asyncpg in prod with PostgreSQL).
+# Async SQLite driver (local dev without Docker).
 aiosqlite==0.21.0
+
+# Async MySQL driver (used when DATABASE_URL=mysql+aiomysql://...).
+aiomysql==0.2.0
+
+# Password hashing — kept for potential future use.
+passlib[bcrypt]==1.7.4
 
 # JWT encoding / decoding.
 python-jose[cryptography]==3.3.0

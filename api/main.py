@@ -13,7 +13,16 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from dotenv import load_dotenv
-load_dotenv()  # Load .env before any os.environ access
+from pathlib import Path
+
+# Load .env — search order: project root → api/ directory → OS env already set
+# This supports both  .\run.ps1  (root .env) and  docker  (env_file in compose)
+_here = Path(__file__).parent
+for _env_path in [_here.parent / ".env", _here / ".env"]:
+    if _env_path.exists():
+        load_dotenv(_env_path, override=False)  # Don't override Docker-injected env vars
+        break
+
 
 from fastapi import APIRouter, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware

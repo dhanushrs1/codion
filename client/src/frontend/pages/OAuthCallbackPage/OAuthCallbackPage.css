@@ -1,0 +1,124 @@
+.callback-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  background-color: var(--bg-surface);
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.callback-spin {
+  animation: spin 1s linear infinite;
+  color: var(--accent-primary);
+}
+
+.callback-spin-sm {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin { 100% { transform: rotate(360deg); } }
+
+.callback-card {
+  background-color: var(--bg-base);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 48px 44px;
+  width: 100%;
+  max-width: 440px;
+  text-align: left;
+}
+
+.callback-brand {
+  font-family: var(--font-heading);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 24px;
+}
+
+.callback-card h2 {
+  font-size: 1.4rem;
+  margin-bottom: 8px;
+}
+
+.callback-card p {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 32px;
+}
+
+.callback-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.callback-error {
+  font-size: 0.85rem;
+  color: var(--state-error);
+  background-color: var(--state-error-bg);
+  border: 1px solid rgba(220, 38, 38, 0.15);
+  border-radius: var(--radius-xs);
+  padding: 10px 14px;
+}
+
+.callback-submit {
+  width: 100%;
+  justify-content: center;
+  padding: 13px;
+  font-size: 0.95rem;
+}
+
+.callback-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Shared input styles (already in base, but scoped here for safety) */
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.input-group label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.input-icon {
+  position: absolute;
+  left: 14px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+.input-wrapper input {
+  width: 100%;
+  padding: 12px 14px 12px 42px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  transition: border-color var(--transition-fast);
+}
+.input-wrapper input:focus {
+  outline: none;
+  border-color: var(--accent-highlight);
+  background-color: var(--bg-base);
+}
+.input-wrapper input::placeholder { color: var(--text-tertiary); }
+.input-hint {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
