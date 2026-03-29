@@ -1,58 +1,60 @@
-"""Codion FastAPI backend.
+"""
+Codion Main API — auth + judge proxy.
 
-This service natively executes user code in isolated subprocesses.
-It mimics the Judge0 API to ensure frontend compatibility out of the box.
+Judge execution is fully delegated to the codion-judge microservice.
+This file contains NO execution logic — it only proxies through to the judge container.
 """
 
 from __future__ import annotations
 
-import asyncio
 import os
-import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
+import httpx
 from dotenv import load_dotenv
-from pathlib import Path
 
-# Load .env — search order: project root → api/ directory → OS env already set
-# This supports both  .\run.ps1  (root .env) and  docker  (env_file in compose)
+# Load .env — project root first, then api/ directory
 _here = Path(__file__).parent
 for _env_path in [_here.parent / ".env", _here / ".env"]:
     if _env_path.exists():
-        load_dotenv(_env_path, override=False)  # Don't override Docker-injected env vars
+        load_dotenv(_env_path, override=False)
         break
 
-
-from fastapi import APIRouter, FastAPI, HTTPException, status
+from fastapi import APIRouter, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from auth.database import init_db
 from auth.router import router as auth_router
 
-CPU_TIME_LIMIT = float(os.getenv("JUDGE0_CPU_TIME_LIMIT", "2"))
-MEMORY_LIMIT_KB = int(os.getenv("JUDGE0_MEMORY_LIMIT_KB", "131072"))
+# ── Config ────────────────────────────────────────────────────────────────────
 
 CORS_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv(
-        "CORS_ORIGINS",
-        "http://localhost:5173,http://127.0.0.1:5173",
-    ).split(",")
-    if origin.strip()
+    o.strip()
+    for o in os.getenv("CORS_ORIGINS", "http://localhost,http://localhost:5173").split(",")
+    if o.strip()
 ]
+
+# Judge microservice URL — only reachable inside Docker network
+JUDGE_URL = os.getenv("JUDGE_URL", "http://codion-judge:2358")
+
+
+# ── App lifespan ──────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: create database tables if not present."""
     await init_db()
     yield
 
+
+# ── FastAPI app ───────────────────────────────────────────────────────────────
+
 app = FastAPI(
     title="Codion API",
-    version="0.4.0",
-    description="Backend service with internal local execution.",
+    version="1.0.0",
+    description="Main platform API — authentication and judge proxy.",
     lifespan=lifespan,
 )
 
@@ -64,118 +66,76 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-router = APIRouter(prefix="/api/v1", tags=["core"])
 
-# In-memory storage for execution results (mocking Judge0)
-submissions_db: dict[str, dict[str, Any]] = {}
+# ── Health ────────────────────────────────────────────────────────────────────
 
-class SubmissionRequest(BaseModel):
-    """Request body accepted from frontend clients."""
-    source_code: str = Field(..., min_length=1)
-    language_id: int = Field(..., examples=[71])  # 71 = Python in Judge0
-    stdin: str = ""
-
-@app.get("/health")
-async def healthcheck() -> dict[str, str]:
+@app.get("/health", tags=["meta"])
+async def healthcheck() -> dict:
     return {"status": "ok", "service": "codion-api"}
 
-@router.get("/status")
-async def api_status() -> dict[str, str]:
-    return {"status": "ready", "layer": "executor"}
 
-async def execute_code_task(token: str, source_code: str, language_id: int, stdin_data: str):
-    """Background task to run code and update the DB."""
-    submissions_db[token] = {
-        "status": {"id": 2, "description": "Processing"},
-        "stdout": None,
-        "stderr": None,
-        "compile_output": None,
-        "time": None,
-        "memory": None,
-        "token": token,
-    }
+# ── Judge proxy ───────────────────────────────────────────────────────────────
 
-    if language_id != 71:
-        submissions_db[token].update({
-            "status": {"id": 13, "description": "Internal Error"},
-            "stderr": "Only Python (language_id=71) is supported by this lightweight executor.",
-        })
-        return
+router = APIRouter(prefix="/api/v1", tags=["judge-proxy"])
 
-    # Write code to a temporary file
-    script_path = f"/tmp/{token}.py"
-    with open(script_path, "w") as f:
-        f.write(source_code)
 
+class SubmissionRequest(BaseModel):
+    source_code: str = Field(..., min_length=1, max_length=50_000)
+    language_id: int = Field(..., examples=[71])
+    stdin: str = ""
+    expected_output: str | None = None
+
+
+@router.post("/judge/submissions", status_code=202)
+async def proxy_create_submission(payload: SubmissionRequest) -> Any:
+    """
+    Enqueue a code execution job in the judge microservice.
+    Returns job_id immediately — client polls GET /judge/submissions/{job_id} for result.
+    """
     try:
-        # Run subprocess
-        proc = await asyncio.create_subprocess_exec(
-            "python3", script_path,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-
-        try:
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(input=stdin_data.encode() if stdin_data else None),
-                timeout=CPU_TIME_LIMIT
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                f"{JUDGE_URL}/submissions",
+                json={
+                    "source_code": payload.source_code,
+                    "language_id": payload.language_id,
+                    "expected_output": payload.expected_output,
+                },
             )
-            
-            if proc.returncode == 0:
-                status_obj = {"id": 3, "description": "Accepted"}
-            else:
-                status_obj = {"id": 11, "description": "Runtime Error (NZEC)"}
-
-            submissions_db[token].update({
-                "status": status_obj,
-                "stdout": stdout.decode() if stdout else None,
-                "stderr": stderr.decode() if stderr else None,
-                "time": "0.01",  # Mocked
-            })
-
-        except asyncio.TimeoutError:
-            proc.kill()
-            submissions_db[token].update({
-                "status": {"id": 5, "description": "Time Limit Exceeded"},
-                "stderr": "Execution timed out.",
-            })
-
-    except Exception as e:
-        submissions_db[token].update({
-            "status": {"id": 13, "description": "Internal Error"},
-            "stderr": str(e),
-        })
-    finally:
-        if os.path.exists(script_path):
-            os.remove(script_path)
+            resp.raise_for_status()
+            return resp.json()
+    except httpx.ConnectError:
+        raise HTTPException(status_code=503, detail="Judge service is unavailable.")
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Judge service timed out.")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
 
 
-@router.post("/judge/submissions", status_code=status.HTTP_202_ACCEPTED)
-async def create_submission(payload: SubmissionRequest) -> dict[str, Any]:
-    """Execute logic locally instead of relying on external Judge0."""
-    token = str(uuid.uuid4())
-    
-    # Fire off execution task
-    asyncio.create_task(execute_code_task(token, payload.source_code, payload.language_id, payload.stdin))
+@router.get("/judge/submissions/{job_id}")
+async def proxy_get_submission(job_id: str) -> Any:
+    """Poll execution result for a given job from the judge microservice."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{JUDGE_URL}/submissions/{job_id}")
+            resp.raise_for_status()
+            return resp.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.ConnectError:
+        raise HTTPException(status_code=503, detail="Judge service is unavailable.")
 
-    return {
-        "message": "Submission queued locally.",
-        "token": token,
-        "limits": {
-            "cpu_time_limit": CPU_TIME_LIMIT,
-            "memory_limit_kb": MEMORY_LIMIT_KB,
-            "enable_network": False,
-        },
-    }
 
-@router.get("/judge/submissions/{token}")
-async def get_submission(token: str) -> dict[str, Any]:
-    """Read submission result."""
-    if token not in submissions_db:
-        raise HTTPException(status_code=404, detail="Submission not found.")
-    
-    return submissions_db[token]
+@router.get("/judge/health", tags=["meta"])
+async def judge_health() -> Any:
+    """Check if the judge container is reachable."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{JUDGE_URL}/health")
+            return resp.json()
+    except Exception:
+        raise HTTPException(status_code=503, detail="Judge service unreachable.")
+
 
 app.include_router(router)
 app.include_router(auth_router)

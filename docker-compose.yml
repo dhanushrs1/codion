@@ -3,21 +3,17 @@ services:
   # PLATFORM SERVICES
   # ==========================================
 
-  # Backend (FastAPI)
+  # Main FastAPI — auth + judge proxy only
   api:
     image: python:3.11-slim
     container_name: codion-api
     working_dir: /app
     volumes:
       - ./api:/app
-      - ./.env:/app/../.env:ro          # Mount root .env one level up so API discovers it
-    ports:
-      - "${API_PORT:-8000}:8000"
     command: >
       sh -c "pip install -r requirements.txt --quiet &&
              uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
     environment:
-      # Override DATABASE_URL to use Docker MySQL — takes priority over .env value
       DATABASE_URL: "mysql+aiomysql://${MYSQL_USER}:${MYSQL_PASSWORD}@codion-mysql:3306/${MYSQL_DATABASE}"
       CORS_ORIGINS: "${CORS_ORIGINS}"
       FRONTEND_URL: "${FRONTEND_URL}"
@@ -27,10 +23,13 @@ services:
       GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET}"
       GITHUB_CLIENT_ID: "${GITHUB_CLIENT_ID}"
       GITHUB_CLIENT_SECRET: "${GITHUB_CLIENT_SECRET}"
+      JUDGE_URL: "http://codion-judge:2358"
     networks:
       - codion_net
     depends_on:
       codion-mysql:
+        condition: service_healthy
+      codion-judge:
         condition: service_healthy
     restart: unless-stopped
 
@@ -46,8 +45,6 @@ services:
     command: sh -c "npm install && npm run dev -- --host"
     environment:
       CHOKIDAR_USEPOLLING: "true"
-      # VITE_API_URL is intentionally left empty — the frontend detects the API
-      # host dynamically from window.location, so no URL is hardcoded.
     networks:
       - codion_net
     restart: unless-stopped
@@ -66,6 +63,67 @@ services:
     networks:
       - codion_net
     restart: unless-stopped
+
+  # ==========================================
+  # JUDGE MICROSERVICES (isolated execution engine)
+  # ==========================================
+
+  # Judge FastAPI — receives submissions, enqueues to Redis, polls results
+  # NOT exposed to the public internet — internal Docker network only
+  codion-judge:
+    build:
+      context: ./judge
+      dockerfile: Dockerfile
+    container_name: codion-judge
+    restart: unless-stopped
+    environment:
+      REDIS_URL: "redis://codion-redis:6379/0"
+      JUDGE_CPU_TIME_LIMIT: "5"
+      JUDGE_MEMORY_LIMIT_MB: "128"
+    networks:
+      - codion_net
+    depends_on:
+      - codion-redis
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:2358/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # Judge Worker — standalone process that consumes jobs from Redis queue
+  # Separate from the judge API so the API stays fast and non-blocking
+  codion-judge-worker:
+    build:
+      context: ./judge
+      dockerfile: Dockerfile
+    container_name: codion-judge-worker
+    # Override CMD: run the worker script instead of the FastAPI server
+    command: ["python", "worker.py"]
+    restart: unless-stopped
+    environment:
+      REDIS_URL: "redis://codion-redis:6379/0"
+      JUDGE_CPU_TIME_LIMIT: "5"
+      JUDGE_MEMORY_LIMIT_MB: "128"
+    networks:
+      - codion_net
+    depends_on:
+      - codion-redis
+
+  # Redis — message broker and job state store
+  # NOT exposed to the public internet — internal Docker network only
+  codion-redis:
+    image: redis:7-alpine
+    container_name: codion-redis
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no   # ephemeral — jobs don't need persistence
+    networks:
+      - codion_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   # ==========================================
   # DATABASE SERVICES

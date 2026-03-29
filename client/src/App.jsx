@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import AdminDashboardPage from "./admin/AdminDashboardPage.jsx";
 import HomePage from "./frontend/pages/HomePage/HomePage.jsx";
 import OAuthCallbackPage from "./frontend/pages/OAuthCallbackPage/OAuthCallbackPage.jsx";
+import WorkspacePage from "./frontend/pages/WorkspacePage/WorkspacePage.jsx";
 import NotFoundPage from "./shared/404/NotFoundPage.jsx";
 import FrontendDashboardPage from "./frontend/FrontendDashboardPage.jsx";
 import FrontendLayout from "./frontend/layout/FrontendLayout.jsx";
@@ -22,6 +23,7 @@ export default function App() {
           element={<Navigate to={APP_ROUTES.frontendDashboard} replace />}
         />
         <Route path={APP_ROUTES.frontendDashboard} element={<FrontendDashboardPage />} />
+        <Route path={APP_ROUTES.frontendWorkspace} element={<WorkspacePage />} />
       </Route>
 
       {/* Admin Panel remains isolated without global header/footer */}
