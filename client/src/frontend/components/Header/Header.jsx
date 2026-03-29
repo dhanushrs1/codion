@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { APP_ROUTES } from "../../../routes/paths.js";
 import "./Header.css";
 
-export default function Header({ isAuthenticated = false, userRole = "USER" }) {
+export default function Header({ isAuthenticated = false, userRole = "USER", onOpenAuthModal }) {
   return (
     <header className="nav-bar">
       <div className="container nav-inner">
@@ -15,19 +15,20 @@ export default function Header({ isAuthenticated = false, userRole = "USER" }) {
           <Link to={APP_ROUTES.home}>Documentation</Link>
         </nav>
         <div style={{ display: "flex", gap: "12px" }}>
-          {/* Role-Based Access Toggles */}
           {!isAuthenticated ? (
             <>
-              <Link to={APP_ROUTES.login} className="btn btn-ghost">
+              {/* These strictly open the popup states instead of routing now */}
+              <button onClick={() => onOpenAuthModal('LOGIN')} className="btn btn-ghost">
                 Sign In
-              </Link>
-              <Link to={APP_ROUTES.frontendDashboard} className="btn btn-brand">
+              </button>
+              <button onClick={() => onOpenAuthModal('REGISTER')} className="btn btn-brand">
                 Start Coding
-              </Link>
+              </button>
             </>
           ) : (
             <>
-              {userRole === "ADMIN" ? (
+              {/* Strict Role-Based Header Constraints for Modifiable UI */}
+              {(userRole === "ADMIN" || userRole === "EDITOR") ? (
                 <Link to={APP_ROUTES.adminDashboard} className="btn btn-ghost">Admin Console</Link>
               ) : null}
               <Link to={APP_ROUTES.frontendDashboard} className="btn btn-brand">

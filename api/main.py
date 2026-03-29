@@ -9,11 +9,18 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
+from contextlib import asynccontextmanager
 from typing import Any
+
+from dotenv import load_dotenv
+load_dotenv()  # Load .env before any os.environ access
 
 from fastapi import APIRouter, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+
+from auth.database import init_db
+from auth.router import router as auth_router
 
 CPU_TIME_LIMIT = float(os.getenv("JUDGE0_CPU_TIME_LIMIT", "2"))
 MEMORY_LIMIT_KB = int(os.getenv("JUDGE0_MEMORY_LIMIT_KB", "131072"))
@@ -27,10 +34,17 @@ CORS_ORIGINS = [
     if origin.strip()
 ]
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup: create database tables if not present."""
+    await init_db()
+    yield
+
 app = FastAPI(
     title="Codion API",
-    version="0.3.0",
+    version="0.4.0",
     description="Backend service with internal local execution.",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -155,3 +169,4 @@ async def get_submission(token: str) -> dict[str, Any]:
     return submissions_db[token]
 
 app.include_router(router)
+app.include_router(auth_router)

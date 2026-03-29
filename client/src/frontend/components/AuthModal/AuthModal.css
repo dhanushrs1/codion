@@ -1,0 +1,167 @@
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  animation: fadeIn var(--transition-fast);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-content {
+  background-color: var(--bg-base);
+  width: 100%;
+  max-width: 440px;
+  border-radius: var(--radius-md);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--border-light);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.modal-close {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  color: var(--text-tertiary);
+  padding: 4px;
+}
+
+.modal-close:hover {
+  color: var(--text-primary);
+}
+
+.modal-header {
+  padding: 40px 40px 0;
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.modal-header .brand-mark {
+  justify-content: center;
+  font-size: 1.5rem;
+  margin-bottom: 24px;
+}
+
+.modal-header h2 {
+  font-size: 1.5rem;
+  margin-bottom: 8px;
+}
+
+.modal-header p {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+
+.modal-form {
+  padding: 0 40px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+}
+
+.input-group label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon {
+  position: absolute;
+  left: 14px;
+  color: var(--text-tertiary);
+}
+
+.input-wrapper input {
+  width: 100%;
+  padding: 12px 14px 12px 42px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  transition: border-color var(--transition-fast);
+}
+
+.input-wrapper input:focus {
+  outline: none;
+  border-color: var(--accent-highlight);
+  background-color: var(--bg-base);
+}
+
+.input-wrapper input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.forgot-link {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  text-align: right;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.forgot-link:hover {
+  color: var(--accent-highlight);
+}
+
+.modal-submit {
+  width: 100%;
+  justify-content: center;
+  padding: 14px;
+  margin-top: 8px;
+  font-size: 0.95rem;
+}
+
+.modal-footer {
+  padding: 24px 40px;
+  background-color: var(--bg-surface);
+  border-top: 1px solid var(--border-light);
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.modal-footer a {
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  margin-left: 4px;
+}
+
+.modal-footer a:hover {
+  color: var(--accent-primary);
+  text-decoration: underline;
+}
