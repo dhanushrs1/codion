@@ -1,0 +1,111 @@
+.loginPage {
+  min-height: 100vh;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loginPage__panel {
+  width: min(860px, 100%);
+  background: var(--surface-panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 30px;
+  box-shadow: 0 20px 48px rgba(19, 35, 63, 0.08);
+}
+
+.loginPage__header h1 {
+  margin: 8px 0 10px;
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+}
+
+.loginPage__header p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.loginPage__eyebrow {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+  color: var(--brand);
+  font-size: 0.78rem;
+}
+
+.loginPage__runtimeInfo {
+  margin-top: 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.loginPage__runtimeInfo span {
+  display: block;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.loginPage__runtimeInfo strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.98rem;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.loginPage__actions {
+  margin-top: 22px;
+  display: grid;
+  gap: 12px;
+}
+
+.loginPage__button {
+  border: 0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.loginPage__button--user {
+  background: var(--user-accent);
+}
+
+.loginPage__button--user:hover {
+  filter: brightness(0.95);
+}
+
+.loginPage__button--admin {
+  background: var(--admin-accent);
+}
+
+.loginPage__button--admin:hover {
+  filter: brightness(0.95);
+}
+
+@media (max-width: 640px) {
+  .loginPage {
+    padding: 14px;
+  }
+
+  .loginPage__panel {
+    padding: 20px;
+  }
+
+  .loginPage__header h1 {
+    font-size: clamp(1.3rem, 2.5vw, 1.8rem);
+  }
+
+  .loginPage__actions {
+    display: grid;
+  }
+}

@@ -1,0 +1,162 @@
+services:
+  # ==========================================
+  # PLATFORM SERVICES
+  # ==========================================
+  
+  # Frontend Dev Server (React/Vite)
+  client:
+    image: node:20-alpine
+    container_name: codion-client
+    working_dir: /app
+    volumes:
+      - ./client:/app
+    expose:
+      - "5173"
+    command: sh -c "npm install && npm run dev"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    networks:
+      - codion_net
+
+  # Backend Dev Server (FastAPI)
+  api:
+    image: python:3.11-alpine
+    container_name: codion-api
+    working_dir: /app
+    volumes:
+      - ./api:/app
+    ports:
+      - "8000:8000"
+    command: sh -c "pip install httpx fastapi pydantic uvicorn[standard] python-dotenv && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+    environment:
+      - JUDGE0_BASE_URL=http://judge0-server:2358
+      - CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost
+    networks:
+      - codion_net
+    depends_on:
+      - codion-mysql
+
+  # NGINX API Gateway
+  gateway:
+    image: nginx:alpine
+    container_name: codion-gateway
+    ports:
+      - "80:80"
+    volumes:
+      - ./infra/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+    networks:
+      - codion_net
+
+  # ==========================================
+  # DATABASE SERVICES
+  # ==========================================
+
+  # MySQL Database (Main app data)
+  codion-mysql:
+    image: mysql:8.0
+    container_name: codion-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password_123
+      MYSQL_DATABASE: codion_db
+      MYSQL_USER: codion_user
+      MYSQL_PASSWORD: codion_password_123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - codion_net
+
+  # phpMyAdmin (Web UI for MySQL)
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: codion-phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: codion-mysql
+      MYSQL_ROOT_PASSWORD: root_password_123
+    ports:
+      - "8080:80" # Maps phpMyAdmin to localhost:8080
+    depends_on:
+      - codion-mysql
+    networks:
+      - codion_net
+
+  # ==========================================
+  # JUDGE0 EXECUTION ENGINE
+  # ==========================================
+
+  # Judge0 internal Redis queue
+  judge0-redis:
+    image: redis:7-alpine
+    container_name: codion-judge-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - judge_redis_data:/data
+    networks:
+      - codion_net
+
+  # Judge0 internal PostgreSQL (required by Judge0 API)
+  judge0-postgres:
+    image: postgres:16-alpine
+    container_name: codion-judge-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: judge0
+      POSTGRES_USER: judge0
+      POSTGRES_PASSWORD: judge0
+    volumes:
+      - judge_postgres_data:/var/lib/postgresql/data
+    networks:
+      - codion_net
+
+  # Judge0 Server
+  judge0-server:
+    image: judge0/judge0:latest
+    container_name: codion-judge-server
+    restart: unless-stopped
+    depends_on:
+      - judge0-redis
+      - judge0-postgres
+    env_file:
+      - ./judge/judge0.conf
+    environment:
+      DATABASE_URL: postgres://judge0:judge0@judge0-postgres:5432/judge0
+      REDIS_URL: redis://judge0-redis:6379
+      RAILS_ENV: production
+    ports:
+      - "2358:2358"
+    command: ["/api/scripts/server"]
+    networks:
+      - codion_net
+
+  # Judge0 Workers
+  judge0-workers:
+    image: judge0/judge0:latest
+    container_name: codion-judge-workers
+    restart: unless-stopped
+    depends_on:
+      - judge0-server
+    env_file:
+      - ./judge/judge0.conf
+    environment:
+      DATABASE_URL: postgres://judge0:judge0@judge0-postgres:5432/judge0
+      REDIS_URL: redis://judge0-redis:6379
+      RAILS_ENV: production
+      # Run sidekiq worker with privileged capabilities for execution
+    privileged: true
+    command: ["/api/scripts/workers"]
+    networks:
+      - codion_net
+
+volumes:
+  mysql_data:
+  judge_redis_data:
+  judge_postgres_data:
+
+networks:
+  codion_net:

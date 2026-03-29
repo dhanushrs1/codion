@@ -1,0 +1,39 @@
+:root {
+  --surface-main: #f5f7fb;
+  --surface-panel: #ffffff;
+  --surface-soft: #eef2f8;
+  --text-primary: #13233f;
+  --text-muted: #4b5c7d;
+  --border: #cfdae8;
+  --brand: #006d77;
+  --brand-strong: #005c64;
+  --user-accent: #3a6ea5;
+  --admin-accent: #a54055;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background: radial-gradient(circle at top left, #ffffff 0%, #eef2f8 62%, #e6edf6 100%);
+  color: var(--text-primary);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+}

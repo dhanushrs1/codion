@@ -1,0 +1,89 @@
+.userDashboardPage {
+  min-height: 100vh;
+  padding: 28px;
+}
+
+.userDashboardPage__header {
+  background: #f6f9ff;
+  border: 1px solid #d9e2f2;
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.userDashboardPage__eyebrow {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.78rem;
+  color: #2d5b88;
+  font-weight: 700;
+}
+
+.userDashboardPage__header h1 {
+  margin: 8px 0;
+  font-size: clamp(1.45rem, 2.2vw, 2rem);
+}
+
+.userDashboardPage__header p {
+  margin: 6px 0 0;
+  color: #2f4f73;
+}
+
+.userDashboardPage__origin {
+  font-size: 0.92rem;
+}
+
+.userDashboardPage__grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.userDashboardPage__card {
+  background: #ffffff;
+  border: 1px solid #d9e2f2;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.userDashboardPage__card h2 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.userDashboardPage__card p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.userDashboardPage__footer {
+  margin-top: 20px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.userDashboardPage__link {
+  text-decoration: none;
+  background: #2d5b88;
+  color: #ffffff;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 600;
+}
+
+.userDashboardPage__link--secondary {
+  background: #5f3440;
+}
+
+@media (max-width: 960px) {
+  .userDashboardPage__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .userDashboardPage {
+    padding: 16px;
+  }
+}
