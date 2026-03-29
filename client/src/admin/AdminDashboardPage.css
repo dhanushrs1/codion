@@ -1,36 +1,38 @@
 .adminDashboardPage {
   min-height: 100vh;
   padding: 28px;
+  background: var(--bg-base);
 }
 
 .adminDashboardPage__header {
-  background: #fff7f9;
-  border: 1px solid #f0ccd5;
-  border-radius: 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
   padding: 18px;
+  box-shadow: var(--shadow-sm);
 }
 
 .adminDashboardPage__eyebrow {
   margin: 0;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  font-size: 0.78rem;
-  color: #8e2d40;
+  font-size: var(--text-xs);
+  color: var(--accent-primary);
   font-weight: 700;
 }
 
 .adminDashboardPage__header h1 {
   margin: 8px 0;
-  font-size: clamp(1.45rem, 2.2vw, 2rem);
+  font-size: var(--text-2xl);
 }
 
 .adminDashboardPage__header p {
   margin: 6px 0 0;
-  color: #5f3440;
+  color: var(--text-secondary);
 }
 
 .adminDashboardPage__origin {
-  font-size: 0.92rem;
+  font-size: var(--text-sm);
 }
 
 .adminDashboardPage__grid {
@@ -41,10 +43,17 @@
 }
 
 .adminDashboardPage__card {
-  background: #ffffff;
-  border: 1px solid #ebd6dc;
-  border-radius: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
   padding: 14px;
+  box-shadow: var(--shadow-md);
+  transition: box-shadow var(--transition-smooth), transform var(--transition-smooth);
+}
+
+.adminDashboardPage__card:hover {
+  box-shadow: var(--shadow-float);
+  transform: translateY(-2px);
 }
 
 .adminDashboardPage__card h2 {
@@ -54,7 +63,7 @@
 
 .adminDashboardPage__card p {
   margin: 0;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   line-height: 1.55;
 }
 
@@ -67,15 +76,19 @@
 
 .adminDashboardPage__link {
   text-decoration: none;
-  background: #8e2d40;
+  background: var(--accent-primary);
   color: #ffffff;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   padding: 10px 14px;
   font-weight: 600;
 }
 
 .adminDashboardPage__link--secondary {
-  background: #4b5c7d;
+  background: #0f766e;
+}
+
+.adminDashboardPage__link:hover {
+  background: var(--accent-hover);
 }
 
 @media (max-width: 960px) {

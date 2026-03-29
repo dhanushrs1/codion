@@ -4,23 +4,24 @@
   justify-content: center;
   align-items: center;
   padding: 16px;
+  background: var(--bg-base);
 }
 
 .notFoundPage__panel {
   width: min(520px, 100%);
   text-align: center;
-  background: var(--surface-panel);
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
   padding: 24px;
-  box-shadow: 0 16px 42px rgba(19, 35, 63, 0.08);
+  box-shadow: var(--shadow-md);
 }
 
 .notFoundPage__code {
   margin: 0;
-  font-size: 2rem;
+  font-size: var(--text-4xl);
   font-weight: 800;
-  color: var(--brand);
+  color: var(--accent-primary);
 }
 
 .notFoundPage__panel h1 {
@@ -29,7 +30,7 @@
 
 .notFoundPage__panel p {
   margin: 0;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   line-height: 1.6;
 }
 
@@ -37,9 +38,13 @@
   display: inline-block;
   margin-top: 16px;
   text-decoration: none;
-  background: var(--brand);
+  background: var(--accent-primary);
   color: #ffffff;
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   font-weight: 700;
+}
+
+.notFoundPage__link:hover {
+  background: var(--accent-hover);
 }
