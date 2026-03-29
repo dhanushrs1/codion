@@ -1,4 +1,4 @@
-"""
+﻿"""
 Codion Auth — Pydantic schemas for OAuth2 request/response validation.
 """
 
@@ -15,6 +15,8 @@ class CompleteProfileRequest(BaseModel):
         max_length=64,
         pattern=r"^[a-zA-Z0-9_\-]+$",
     )
+    first_name: str = Field(..., min_length=1, max_length=128)
+    last_name: str | None = Field(None, max_length=128)
 
     model_config = {"extra": "forbid"}
 

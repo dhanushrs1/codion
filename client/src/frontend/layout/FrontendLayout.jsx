@@ -46,7 +46,22 @@ export default function FrontendLayout() {
     navigate(APP_ROUTES.frontendDashboard);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      const token = localStorage.getItem("codion_token");
+      if (token) {
+        // Assuming api.js exposes apiUrl, or we can just fetch relatively because frontend is proxied
+        await fetch("/auth/logout", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`
+          }
+        });
+      }
+    } catch (e) {
+      // Ignore network errors on logout
+    }
+
     localStorage.removeItem("codion_token");
     localStorage.removeItem("codion_role");
     localStorage.removeItem("codion_username");

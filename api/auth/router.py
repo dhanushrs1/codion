@@ -27,8 +27,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.database import get_db
 from auth.jwt_utils import create_access_token, create_setup_token, verify_setup_token
-from auth.models import User
+from auth.models import User, UserSession
 from auth.schemas import AccessTokenResponse, CompleteProfileRequest, SetupTokenResponse
+from datetime import datetime
 
 # ---------------------------------------------------------------------------
 # OAuth App credentials — use getenv so missing GitHub doesn't crash startup
@@ -77,6 +78,7 @@ async def _handle_oauth_profile(
     full_name: str,
     provider: str,
     db: AsyncSession,
+    request: Request,
 ) -> RedirectResponse:
     """
     Existing user  → redirect to frontend with access_token + status=active.
@@ -86,7 +88,24 @@ async def _handle_oauth_profile(
     user = await db.scalar(select(User).where(User.email == email))
 
     if user:
+        ip_address = request.headers.get("x-real-ip") or request.client.host if request.client else None
+        device_info = request.headers.get("user-agent", "")[:500]
+
+        user.last_login = datetime.utcnow()
+        new_session = UserSession(
+            user_id=user.id,
+            ip_address=ip_address,
+            device_info=device_info
+        )
+        db.add(new_session)
+        await db.commit()
+        await db.refresh(user)
+
         token = create_access_token(user.username, user.role)
+        # Store session ID into token? Usually with JWT we don't, but here the task mentioned logging out.
+        # We can implement logout by adding a logout route which takes the access token, however it's stateless.
+        # If we want to capture logout time, we need to add a route for logout that takes the current token or just user.
+        
         params = urlencode({
             "status": "active",
             "token": token,
@@ -159,7 +178,7 @@ async def google_callback(
             raise HTTPException(status_code=400, detail="Google did not return an email address.")
 
         full_name: str = profile.get("name", email.split("@")[0])
-        return await _handle_oauth_profile(email, full_name, "google", db)
+        return await _handle_oauth_profile(email, full_name, "google", db, request)
     except HTTPException:
         raise
     except Exception as exc:
@@ -228,12 +247,32 @@ async def github_callback(
             raise HTTPException(status_code=400, detail="GitHub did not return a verified email address.")
 
         full_name: str = profile.get("name") or profile.get("login", email.split("@")[0])
-        return await _handle_oauth_profile(email, full_name, "github", db)
+        return await _handle_oauth_profile(email, full_name, "github", db, request)
     except HTTPException:
         raise
     except Exception as exc:
         error_params = urlencode({"error": str(exc)})
         return RedirectResponse(f"{FRONTEND_URL}/auth/callback?{error_params}")
+
+
+# ── Username Check ────────────────────────────────────────────────────────
+
+@router.get(
+    "/check-username",
+    summary="Check if a username is available",
+)
+async def check_username(
+    username: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, bool]:
+    """
+    Returns {"available": True} if the username doesn't exist.
+    """
+    if not username:
+        return {"available": False}
+        
+    user = await db.scalar(select(User).where(User.username == username))
+    return {"available": user is None}
 
 
 # ── Complete Profile ───────────────────────────────────────────────────────
@@ -276,15 +315,31 @@ async def complete_profile(
     # Create user — role is always hardcoded to "student"
     new_user = User(
         email=email,
-        full_name=full_name,
+        first_name=payload.first_name,
+        last_name=payload.last_name,
         username=payload.username,
         auth_provider=provider,
         role="student",
+        last_login=datetime.utcnow()
     )
     db.add(new_user)
     try:
         await db.commit()
         await db.refresh(new_user)
+        
+        # Track initial session
+        ip_address = request.headers.get("x-real-ip") or request.client.host if request.client else None
+        device_info = request.headers.get("user-agent", "")[:500]
+        
+        new_session = UserSession(
+            user_id=new_user.id,
+            ip_address=ip_address,
+            device_info=device_info
+        )
+        db.add(new_session)
+        await db.commit()
+        await db.refresh(new_user)
+        
     except IntegrityError:
         await db.rollback()
         raise HTTPException(
@@ -299,3 +354,90 @@ async def complete_profile(
         role=new_user.role,
         username=new_user.username,
     )
+
+# ── Logout ────────────────────────────────────────────────────────────────
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Logout user and record logout time",
+)
+async def logout_user(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Marks the user's most recent session as logged out.
+    """
+    auth_header = request.headers.get("authorization") or request.headers.get("Authorization") or ""
+    if not auth_header.lower().startswith("bearer "):
+        # If no token, just ignore and let them logout locally
+        return
+
+    try:
+        from auth.jwt_utils import _decode
+        payload = _decode(auth_header[7:])
+        username = payload.get("sub")
+        if not username:
+            return
+            
+        user = await db.scalar(select(User).where(User.username == username))
+        if user:
+            # Find most recent open session for this user
+            from sqlalchemy import desc
+            recent_session = await db.scalar(
+                select(UserSession)
+                .where(UserSession.user_id == user.id)
+                .where(UserSession.logout_time.is_(None))
+                .order_by(desc(UserSession.login_time))
+                .limit(1)
+            )
+            if recent_session:
+                recent_session.logout_time = datetime.utcnow()
+                await db.commit()
+    except Exception:
+        # Ignore JWT decode errors on logout, just return success so frontend clears token
+        pass
+
+
+# ── Logout ────────────────────────────────────────────────────────────────
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Logout user and record logout time",
+)
+async def logout_user(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Marks the user's most recent session as logged out.
+    """
+    auth_header = request.headers.get("authorization") or request.headers.get("Authorization") or ""
+    if not auth_header.lower().startswith("bearer "):
+        return
+
+    try:
+        from auth.jwt_utils import _decode
+        payload = _decode(auth_header[7:])
+        username = payload.get("sub")
+        if not username:
+            return
+            
+        user = await db.scalar(select(User).where(User.username == username))
+        if user:
+            from sqlalchemy import desc
+            recent_session = await db.scalar(
+                select(UserSession)
+                .where(UserSession.user_id == user.id)
+                .where(UserSession.logout_time.is_(None))
+                .order_by(desc(UserSession.login_time))
+                .limit(1)
+            )
+            if recent_session:
+                recent_session.logout_time = datetime.utcnow()
+                await db.commit()
+    except Exception:
+        pass
+
