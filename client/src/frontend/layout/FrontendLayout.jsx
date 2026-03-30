@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 import Header from "../components/Header/Header.jsx";
 import Footer from "../components/Footer/Footer.jsx";
 import AuthModal from "../components/AuthModal/AuthModal.jsx";
@@ -14,34 +14,42 @@ import "./FrontendLayout.css";
 */
 export default function FrontendLayout() {
   const navigate = useNavigate();
-  const location = useLocation();
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState("USER");
   const [displayName, setDisplayName] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
 
   // Restore session from localStorage on mount
   useEffect(() => {
     const token = localStorage.getItem("codion_token");
     const role = localStorage.getItem("codion_role");
-    const name = localStorage.getItem("codion_username");
-    if (token && role && name) {
+    const name = localStorage.getItem("codion_username") ?? "";
+    const storedAvatarUrl = localStorage.getItem("codion_avatar_url") ?? "";
+    if (token && role) {
       setIsAuthenticated(true);
       setUserRole(role.toUpperCase());
       setDisplayName(name);
+      setAvatarUrl(storedAvatarUrl);
     }
   }, []);
 
   // Callback called by AuthModal after successful auth (new or existing user)
-  const handleAuthenticate = (role, username) => {
+  const handleAuthenticate = (role, username, nextAvatarUrl = "") => {
     const normalizedRole = (role ?? "STUDENT").toUpperCase();
     setIsAuthenticated(true);
     setUserRole(normalizedRole);
     setDisplayName(username ?? "");
+    setAvatarUrl(nextAvatarUrl ?? "");
 
     localStorage.setItem("codion_role", normalizedRole);
     localStorage.setItem("codion_username", username ?? "");
+    if ((nextAvatarUrl ?? "").trim()) {
+      localStorage.setItem("codion_avatar_url", nextAvatarUrl);
+    } else {
+      localStorage.removeItem("codion_avatar_url");
+    }
     setIsAuthModalOpen(false);
     navigate(APP_ROUTES.frontendDashboard);
   };
@@ -65,9 +73,11 @@ export default function FrontendLayout() {
     localStorage.removeItem("codion_token");
     localStorage.removeItem("codion_role");
     localStorage.removeItem("codion_username");
+    localStorage.removeItem("codion_avatar_url");
     setIsAuthenticated(false);
     setUserRole("USER");
     setDisplayName("");
+    setAvatarUrl("");
     navigate(APP_ROUTES.home);
   };
 
@@ -77,6 +87,7 @@ export default function FrontendLayout() {
         isAuthenticated={isAuthenticated}
         userRole={userRole}
         displayName={displayName}
+        avatarUrl={avatarUrl}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onLogout={handleLogout}
       />

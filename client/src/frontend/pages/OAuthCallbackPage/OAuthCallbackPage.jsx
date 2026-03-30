@@ -8,7 +8,7 @@ import "./OAuthCallbackPage.css";
 /*
   This page is the frontend landing point after Google/GitHub OAuth.
   The API redirects here with one of:
-    ?status=active&token=...&role=...&username=...
+    ?status=active&token=...&role=...&username=...&avatar_url=...
     ?status=pending_username&setup_token=...
     ?error=...
 */
@@ -20,6 +20,7 @@ export default function OAuthCallbackPage() {
   const token = params.get("token");
   const role = params.get("role");
   const username = params.get("username");
+  const avatarUrl = params.get("avatar_url");
   const setupToken = params.get("setup_token");
   const error = params.get("error");
 
@@ -33,6 +34,7 @@ export default function OAuthCallbackPage() {
 
   const setupTokenPayload = setupToken ? decodeJwt(setupToken) : {};
   const fullName = setupTokenPayload.full_name || '';
+  const setupAvatarUrl = setupTokenPayload.avatar_url || "";
   const initialFirstName = fullName.split(' ')[0] || '';
   const initialLastName = fullName.split(' ').slice(1).join(' ') || '';
 
@@ -50,9 +52,14 @@ export default function OAuthCallbackPage() {
       localStorage.setItem("codion_token", token);
       localStorage.setItem("codion_role", (role ?? "student").toUpperCase());
       localStorage.setItem("codion_username", username ?? "");
+      if ((avatarUrl ?? "").trim()) {
+        localStorage.setItem("codion_avatar_url", avatarUrl);
+      } else {
+        localStorage.removeItem("codion_avatar_url");
+      }
       navigate(APP_ROUTES.frontendDashboard, { replace: true });
     }
-  }, [status, token, role, username, navigate]);
+  }, [status, token, role, username, avatarUrl, navigate]);
 
   // Live username availability check (Debounced)
   useEffect(() => {
@@ -111,6 +118,12 @@ export default function OAuthCallbackPage() {
       localStorage.setItem("codion_token", data.access_token);
       localStorage.setItem("codion_role", (data.role ?? "student").toUpperCase());
       localStorage.setItem("codion_username", data.username ?? "");
+      const resolvedAvatarUrl = (data.avatar_url ?? setupAvatarUrl ?? "").trim();
+      if (resolvedAvatarUrl) {
+        localStorage.setItem("codion_avatar_url", resolvedAvatarUrl);
+      } else {
+        localStorage.removeItem("codion_avatar_url");
+      }
       navigate(APP_ROUTES.frontendDashboard, { replace: true });
     } catch {
       setErrMsg("Network error. Please try again.");

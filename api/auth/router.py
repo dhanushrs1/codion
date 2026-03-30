@@ -77,6 +77,7 @@ async def _handle_oauth_profile(
     email: str,
     full_name: str,
     provider: str,
+    avatar_url: str | None,
     db: AsyncSession,
     request: Request,
 ) -> RedirectResponse:
@@ -111,10 +112,11 @@ async def _handle_oauth_profile(
             "token": token,
             "role": user.role,
             "username": user.username,
+            "avatar_url": avatar_url or "",
         })
         return RedirectResponse(f"{FRONTEND_URL}/auth/callback?{params}")
 
-    setup_token = create_setup_token(email, full_name, provider)
+    setup_token = create_setup_token(email, full_name, provider, avatar_url)
     params = urlencode({
         "status": "pending_username",
         "setup_token": setup_token,
@@ -178,7 +180,8 @@ async def google_callback(
             raise HTTPException(status_code=400, detail="Google did not return an email address.")
 
         full_name: str = profile.get("name", email.split("@")[0])
-        return await _handle_oauth_profile(email, full_name, "google", db, request)
+        avatar_url: str | None = profile.get("picture") or None
+        return await _handle_oauth_profile(email, full_name, "google", avatar_url, db, request)
     except HTTPException:
         raise
     except Exception as exc:
@@ -247,7 +250,8 @@ async def github_callback(
             raise HTTPException(status_code=400, detail="GitHub did not return a verified email address.")
 
         full_name: str = profile.get("name") or profile.get("login", email.split("@")[0])
-        return await _handle_oauth_profile(email, full_name, "github", db, request)
+        avatar_url: str | None = profile.get("avatar_url") or None
+        return await _handle_oauth_profile(email, full_name, "github", avatar_url, db, request)
     except HTTPException:
         raise
     except Exception as exc:
@@ -297,6 +301,7 @@ async def complete_profile(
     email: str = claims["email"]
     full_name: str = claims["full_name"]
     provider: str = claims["provider"]
+    avatar_url: str | None = claims.get("avatar_url")
 
     # Username uniqueness check
     if await db.scalar(select(User).where(User.username == payload.username)):
@@ -353,6 +358,7 @@ async def complete_profile(
         status="active",
         role=new_user.role,
         username=new_user.username,
+        avatar_url=avatar_url,
     )
 
 # ── Logout ────────────────────────────────────────────────────────────────

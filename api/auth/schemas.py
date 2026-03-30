@@ -28,6 +28,7 @@ class AccessTokenResponse(BaseModel):
     status: str       # "active"
     role: str
     username: str
+    avatar_url: str | None = None
 
 
 class SetupTokenResponse(BaseModel):

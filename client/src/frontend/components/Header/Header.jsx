@@ -6,6 +6,7 @@ export default function Header({
   isAuthenticated = false,
   userRole = "USER",
   displayName = "",
+  avatarUrl = "",
   onOpenAuthModal,
   onLogout,
 }) {
@@ -34,18 +35,28 @@ export default function Header({
             </>
           ) : (
             <>
-              {/* Admin Console — visible to ADMIN and EDITOR roles */}
-              {(userRole === "ADMIN" || userRole === "EDITOR") && (
-                <Link to={APP_ROUTES.adminDashboard} className="btn btn-ghost">
-                  Admin Console
+              {userRole === "ADMIN" ? (
+                <Link to={APP_ROUTES.adminDashboard} className="btn btn-brand">
+                  Admin Panel
+                </Link>
+              ) : (
+                <Link to={APP_ROUTES.frontendDashboard} className="btn btn-brand">
+                  Dashboard
                 </Link>
               )}
-              <Link to={APP_ROUTES.frontendDashboard} className="btn btn-brand">
-                Dashboard
-              </Link>
-              {displayName && (
-                <span className="nav-username">@{displayName}</span>
-              )}
+              <div className="nav-profile" title={displayName ? `@${displayName}` : "Profile"}>
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt={displayName ? `${displayName} profile` : "User profile"}
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <span className="nav-profile-fallback">
+                    {(displayName?.charAt(0) || "U").toUpperCase()}
+                  </span>
+                )}
+              </div>
               <button onClick={onLogout} className="nav-logout">
                 Sign Out
               </button>

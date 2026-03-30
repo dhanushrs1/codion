@@ -3,7 +3,7 @@ Codion Auth — JWT utility functions.
 
 Two token types:
   Access JWT : long-lived  — {sub: username, role, status: "active"}
-  Setup JWT  : 15-min       — {email, full_name, provider, status: "pending_username"}
+    Setup JWT  : 15-min       — {email, full_name, provider, avatar_url, status: "pending_username"}
 """
 
 from __future__ import annotations
@@ -40,12 +40,18 @@ def create_access_token(username: str, role: str) -> str:
     return _encode({"sub": username, "role": role, "status": "active", "exp": expire})
 
 
-def create_setup_token(email: str, full_name: str, provider: str) -> str:
+def create_setup_token(
+    email: str,
+    full_name: str,
+    provider: str,
+    avatar_url: str | None = None,
+) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=SETUP_TOKEN_EXPIRE_MINUTES)
     return _encode({
         "email": email,
         "full_name": full_name,
         "provider": provider,
+        "avatar_url": avatar_url,
         "status": "pending_username",
         "exp": expire,
     })
