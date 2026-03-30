@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import AdminDashboardPage from "./admin/AdminDashboardPage.jsx";
+import AdminDashboardPage from "./backend/AdminDashboardPage.jsx";
 import HomePage from "./frontend/pages/HomePage/HomePage.jsx";
 import OAuthCallbackPage from "./frontend/pages/OAuthCallbackPage/OAuthCallbackPage.jsx";
 import WorkspacePage from "./frontend/pages/WorkspacePage/WorkspacePage.jsx";
@@ -17,10 +17,18 @@ export default function App() {
       {/* Frontend Unified Layout wrapping user-facing pages */}
       <Route element={<FrontendLayout />}>
         <Route path={APP_ROUTES.home} element={<HomePage />} />
-        
+
         <Route
           path={APP_ROUTES.frontendRoot}
           element={<Navigate to={APP_ROUTES.frontendDashboard} replace />}
+        />
+        <Route
+          path={APP_ROUTES.frontendDashboardLegacy}
+          element={<Navigate to={APP_ROUTES.frontendDashboard} replace />}
+        />
+        <Route
+          path={APP_ROUTES.frontendWorkspaceLegacy}
+          element={<Navigate to={APP_ROUTES.frontendWorkspace} replace />}
         />
         <Route path={APP_ROUTES.frontendDashboard} element={<FrontendDashboardPage />} />
         <Route path={APP_ROUTES.frontendWorkspace} element={<WorkspacePage />} />
@@ -34,6 +42,14 @@ export default function App() {
       <Route
         path={APP_ROUTES.adminDashboard}
         element={<AdminDashboardPage />}
+      />
+      <Route
+        path={APP_ROUTES.backendRootLegacy}
+        element={<Navigate to={APP_ROUTES.adminDashboard} replace />}
+      />
+      <Route
+        path={APP_ROUTES.backendDashboardLegacy}
+        element={<Navigate to={APP_ROUTES.adminDashboard} replace />}
       />
 
       <Route path="*" element={<NotFoundPage />} />
