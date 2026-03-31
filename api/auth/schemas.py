@@ -1,4 +1,4 @@
-﻿"""
+"""
 Codion Auth — Pydantic schemas for OAuth2 request/response validation.
 """
 
@@ -40,6 +40,34 @@ class SetupTokenResponse(BaseModel):
     token_type: str = "bearer"
     status: str       # "pending_username"
     message: str
+
+
+class AdminUserResponse(BaseModel):
+    """Admin view of a user profile."""
+    id: int
+    email: str
+    first_name: str
+    last_name: str | None = None
+    username: str
+    auth_provider: str
+    role: str
+    is_active: bool
+    ban_reason: str | None = None
+    created_at: datetime
+    last_login: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class RoleUpdateRequest(BaseModel):
+    """Payload to change user's role."""
+    role: str = Field(..., pattern="^(admin|editor|student|ADMIN|EDITOR|USER)$")
+
+
+class BanUpdateRequest(BaseModel):
+    """Payload to ban or unban a user."""
+    is_active: bool
+    ban_reason: str | None = Field(None, max_length=256)
 
 
 class AdminActivityEventRequest(BaseModel):

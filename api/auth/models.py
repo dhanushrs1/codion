@@ -24,6 +24,7 @@ class User(Base):
     auth_provider = Column(String(32), nullable=False)   # "google" | "github"
     role = Column(String(32), nullable=False, default="student")
     is_active = Column(Boolean, default=True, nullable=False)
+    ban_reason = Column(String(256), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     last_login = Column(DateTime, nullable=True)
 

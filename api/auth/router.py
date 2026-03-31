@@ -39,6 +39,10 @@ from auth.schemas import (
     AdminActivityLogItem,
     AdminActivityLogListResponse,
     CompleteProfileRequest,
+    SetupTokenResponse,
+    AdminUserResponse,
+    RoleUpdateRequest,
+    BanUpdateRequest,
 )
 
 # ---------------------------------------------------------------------------
@@ -166,6 +170,9 @@ async def _get_authenticated_user(
     user = await db.scalar(select(User).where(User.username == username))
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found.")
+    
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is banned.")
 
     return user, _normalize_role(user.role or payload.get("role"))
 
@@ -233,6 +240,13 @@ async def _handle_oauth_profile(
     user = await db.scalar(select(User).where(User.email == email))
 
     if user:
+        if not user.is_active:
+            import urllib.parse
+            reason = urllib.parse.quote(user.ban_reason or "Violation of terms.")
+            return RedirectResponse(
+                url=f"{FRONTEND_URL}/auth/callback?error=banned&reason={reason}"
+            )
+
         user.last_login = datetime.utcnow()
         db.add(
             UserSession(
@@ -657,3 +671,127 @@ async def list_admin_activity_logs(
         items=[AdminActivityLogItem.model_validate(item) for item in items],
         total=total,
     )
+
+
+# ── Admin User Management ──────────────────────────────────────────────────
+
+@router.get(
+    "/admin/users",
+    response_model=list[AdminUserResponse],
+    summary="List users for admin panel",
+)
+async def list_admin_users(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    search: str | None = Query(default=None, max_length=64),
+    role: str | None = Query(default=None, max_length=32),
+) -> list[AdminUserResponse]:
+    _, normalized_role = await _get_authenticated_user(request, db)
+
+    if not _is_elevated_role(normalized_role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin/editor users can view the user list.",
+        )
+
+    query = select(User)
+
+    if role:
+        query = query.where(User.role == _normalize_role(role))
+
+    if search:
+        s = f"%{search}%"
+        query = query.where(
+            (User.username.ilike(s)) | (User.email.ilike(s)) | (User.first_name.ilike(s))
+        )
+
+    query = query.order_by(User.created_at.desc()).limit(200)
+
+    users = (await db.scalars(query)).all()
+    return [AdminUserResponse.model_validate(u) for u in users]
+
+
+@router.post(
+    "/admin/users/{user_id}/role",
+    response_model=AdminUserResponse,
+    summary="Update user role",
+)
+async def update_user_role(
+    user_id: int,
+    payload: RoleUpdateRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> AdminUserResponse:
+    admin_user, admin_role = await _get_authenticated_user(request, db)
+
+    if admin_role != "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can modify user roles.",
+        )
+
+    if admin_user.id == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot change your own role.",
+        )
+
+    target_user = await db.scalar(select(User).where(User.id == user_id))
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    target_user.role = payload.role.lower()
+
+    await _record_activity(
+        db=db, request=request, user=admin_user, role=admin_role,
+        activity_type="admin_update_role", activity_context=f"User {target_user.username}", target_path=f"/users/{user_id}",
+        details={"new_role": payload.role.lower()}
+    )
+
+    await db.commit()
+    await db.refresh(target_user)
+    return AdminUserResponse.model_validate(target_user)
+
+
+@router.post(
+    "/admin/users/{user_id}/status",
+    response_model=AdminUserResponse,
+    summary="Update user ban status",
+)
+async def update_user_status(
+    user_id: int,
+    payload: BanUpdateRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> AdminUserResponse:
+    admin_user, admin_role = await _get_authenticated_user(request, db)
+
+    if admin_role != "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can ban/unban users.",
+        )
+
+    if admin_user.id == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot ban yourself.",
+        )
+
+    target_user = await db.scalar(select(User).where(User.id == user_id))
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    target_user.is_active = payload.is_active
+    target_user.ban_reason = payload.ban_reason if not payload.is_active else None
+
+    await _record_activity(
+        db=db, request=request, user=admin_user, role=admin_role,
+        activity_type="admin_ban_user" if not payload.is_active else "admin_unban_user",
+        activity_context=f"User {target_user.username}", target_path=f"/users/{user_id}",
+        details={"reason": payload.ban_reason}
+    )
+
+    await db.commit()
+    await db.refresh(target_user)
+    return AdminUserResponse.model_validate(target_user)

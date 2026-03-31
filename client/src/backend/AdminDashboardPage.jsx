@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { APP_ROUTES } from "../routes/paths.js";
 import { apiUrl } from "../shared/api.js";
+import UserManagement from "./users/UserManagement.jsx";
 import "./AdminDashboardPage.css";
 
 // ── Sidebar items ──────────────────────────────────────────────────────────
@@ -178,17 +179,7 @@ function OverviewPage() {
   );
 }
 
-function UsersPage() {
-  return (
-    <div className="ap-page">
-      <div className="ap-page__empty">
-        <Users size={40} strokeWidth={1.2} />
-        <h2>User Management</h2>
-        <p>View, search, and manage user accounts from here.</p>
-      </div>
-    </div>
-  );
-}
+
 
 // ── Access denied ──────────────────────────────────────────────────────────
 
@@ -270,7 +261,7 @@ export default function AdminDashboardPage() {
 
         <div className="ap-body">
           {activeKey === "overview" && <OverviewPage />}
-          {activeKey === "users" && <UsersPage />}
+          {activeKey === "users" && <UserManagement role={role} username={username} />}
         </div>
       </div>
     </main>

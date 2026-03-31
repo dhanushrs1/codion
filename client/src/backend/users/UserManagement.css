@@ -1,0 +1,510 @@
+.um-container {
+  padding: 32px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.um-header {
+  margin-bottom: 32px;
+}
+
+.um-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.um-subtitle {
+  font-size: 0.95rem;
+  color: #6b7280;
+}
+
+.um-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.um-search {
+  position: relative;
+  flex: 1;
+  max-width: 360px;
+}
+
+.um-search__icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #9ca3af;
+}
+
+.um-search input {
+  width: 100%;
+  padding: 10px 12px 10px 38px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  outline: none;
+}
+
+.um-search input:focus {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
+}
+
+.um-filters {
+  display: flex;
+  gap: 8px;
+  background: #f3f4f6;
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.um-filter-btn {
+  padding: 6px 16px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #4b5563;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.um-filter-btn:hover {
+  color: #111827;
+}
+
+.um-filter-btn--active {
+  background: #ffffff;
+  color: #111827;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+/* Table */
+.um-table-wrapper {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+}
+
+.um-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.um-table th {
+  background: #f9fafb;
+  padding: 14px 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #6b7280;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.um-table td {
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  vertical-align: middle;
+}
+
+.um-table tr:last-child td {
+  border-bottom: none;
+}
+
+.um-table tbody tr {
+  transition: background 0.15s;
+}
+
+.um-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+/* Banned Row State */
+.um-row-banned td {
+  opacity: 0.7;
+}
+
+.um-table__empty {
+  text-align: center;
+  padding: 48px !important;
+  color: #6b7280;
+  font-size: 0.95rem;
+}
+
+/* Cells */
+.um-user-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.um-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #e0f2fe;
+  color: #0284c7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.um-user-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.um-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #111827;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.um-badge-me {
+  font-size: 0.65rem;
+  background: #f3f4f6;
+  color: #4b5563;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.um-username {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.um-email-cell {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.9rem;
+  color: #374151;
+}
+
+.um-provider {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  text-transform: capitalize;
+}
+
+/* Badges */
+.um-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.um-role-badge--admin {
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.um-role-badge--editor {
+  background: #fdf4ff;
+  color: #c026d3;
+}
+
+.um-role-badge--student {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.um-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.um-status-badge--active {
+  color: #059669;
+}
+
+.um-status-badge--banned {
+  color: #dc2626;
+  cursor: help;
+}
+
+.um-date {
+  font-size: 0.9rem;
+  color: #4b5563;
+}
+
+/* Actions */
+.um-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.um-role-select {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #374151;
+  background: #ffffff;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.um-role-select:focus {
+  border-color: #60a5fa;
+}
+
+.um-role-select:disabled {
+  background: #f3f4f6;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.um-ban-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+
+.um-ban-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.um-ban-btn--ban {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.um-ban-btn--ban:not(:disabled):hover {
+  background: #fee2e2;
+}
+
+.um-ban-btn--unban {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.um-ban-btn--unban:not(:disabled):hover {
+  background: #d1fae5;
+}
+
+/* Spin animation */
+.um-spin {
+  animation: um-spin 1s linear infinite;
+}
+
+@keyframes um-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Restricted State for Editors */
+.um-restricted {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  height: 60vh;
+  padding: 40px;
+}
+
+.um-restricted__icon {
+  color: #d1d5db;
+  margin-bottom: 24px;
+}
+
+.um-restricted h2 {
+  font-size: 1.5rem;
+  color: #111827;
+  margin-bottom: 8px;
+}
+
+.um-restricted p {
+  font-size: 1rem;
+  color: #4b5563;
+  margin-bottom: 4px;
+}
+
+.um-restricted__sub {
+  font-size: 0.9rem !important;
+  color: #9ca3af !important;
+}
+
+/* Modals */
+.um-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.4);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+}
+
+.um-modal {
+  background: #ffffff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  animation: um-modalIn 0.2s ease-out;
+}
+
+@keyframes um-modalIn {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.um-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.um-modal__header h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+}
+
+.um-modal__close {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  display: flex;
+}
+
+.um-modal__close:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.um-modal__body {
+  padding: 24px;
+}
+
+.um-modal__desc {
+  font-size: 0.95rem;
+  color: #4b5563;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.um-input-group {
+  margin-bottom: 24px;
+}
+
+.um-input-group label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.um-input-group textarea {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  font-size: 0.95rem;
+  color: #111827;
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.2s;
+  font-family: inherit;
+}
+
+.um-input-group textarea:focus {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
+}
+
+.um-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.um-btn {
+  padding: 10px 18px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+
+.um-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.um-btn--ghost {
+  background: transparent;
+  color: #4b5563;
+}
+
+.um-btn--ghost:hover:not(:disabled) {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.um-btn--danger {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.um-btn--danger:hover:not(:disabled) {
+  background: #b91c1c;
+}

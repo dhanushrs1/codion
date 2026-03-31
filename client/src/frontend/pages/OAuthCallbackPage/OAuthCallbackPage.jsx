@@ -23,6 +23,7 @@ export default function OAuthCallbackPage() {
   const avatarUrl = params.get("avatar_url");
   const setupToken = params.get("setup_token");
   const error = params.get("error");
+  const banReason = params.get("reason");
 
   const decodeJwt = (token) => {
     try {
@@ -142,8 +143,34 @@ export default function OAuthCallbackPage() {
     );
   }
 
-  // Hard error from API (e.g. OAuth provider rejected)
+  // Hard error from API (e.g. OAuth provider rejected or account banned)
   if (errMsg && status !== "pending_username") {
+    if (errMsg === "banned") {
+      return (
+        <div className="callback-screen">
+          <AlertCircle size={48} color="var(--state-error)" />
+          <h2 style={{ color: "var(--state-error)", marginTop: "16px" }}>Account Banned</h2>
+          <div style={{ maxWidth: 440, textAlign: "center", display: "flex", flexDirection: "column", gap: "16px", marginTop: "12px" }}>
+            <p style={{ margin: 0, fontWeight: 500, fontSize: "1.05rem", color: "var(--text-primary)" }}>
+              Your account cannot be logged in, or cannot be created because you have been banned from the website.
+            </p>
+            {banReason && (
+              <div style={{ background: "#fef2f2", color: "#991b1b", padding: "12px", borderRadius: "8px", border: "1px solid #fecaca", fontSize: "0.9rem" }}>
+                <strong>Reason:</strong> {banReason}
+              </div>
+            )}
+            <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--text-secondary)" }}>
+              For more information contact the head through the contact page:<br/>
+              <strong style={{ color: "var(--text-primary)" }}>admin@codion.dummy</strong>
+            </p>
+          </div>
+          <button className="btn btn-brand" onClick={() => navigate(APP_ROUTES.home)} style={{ marginTop: 24 }}>
+            Return Home
+          </button>
+        </div>
+      );
+    }
+
     return (
       <div className="callback-screen">
         <AlertCircle size={40} color="var(--state-error)" />
