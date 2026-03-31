@@ -34,7 +34,7 @@ function useLiveClock() {
 
 // ── Sidebar ────────────────────────────────────────────────────────────────
 
-function AdminSidebar({ activeKey, onSelect, isOpen, onToggle }) {
+function AdminSidebar({ activeKey, onSelect, isOpen, onToggle, onLogout }) {
   const VERSION = import.meta.env.VITE_APP_VERSION ?? "1.0.0";
 
   return (
@@ -46,7 +46,7 @@ function AdminSidebar({ activeKey, onSelect, isOpen, onToggle }) {
             <Link to={APP_ROUTES.home} className="ap-sidebar__brand">
               Cod<span style={{ color: "var(--accent-primary)" }}>ion</span>
             </Link>
-            <span className="ap-sidebar__adminTag">ADMIN</span>
+            <span className="ap-sidebar__adminTag">CONSOLE</span>
           </div>
         ) : (
           <div className="ap-sidebar__brandArea ap-sidebar__brandArea--closed">
@@ -85,12 +85,12 @@ function AdminSidebar({ activeKey, onSelect, isOpen, onToggle }) {
         ))}
       </nav>
 
-      {/* Footer (only version now) */}
+      {/* Footer */}
       <div className="ap-sidebar__footer">
         {isOpen ? (
-          <p className="ap-sidebar__version">v{VERSION}</p>
+          <p className="ap-sidebar__version">Version: v{VERSION}</p>
         ) : (
-          <p className="ap-sidebar__version ap-sidebar__version--closed">v</p>
+          <p className="ap-sidebar__version ap-sidebar__version--closed">v{VERSION}</p>
         )}
       </div>
     </aside>
@@ -155,9 +155,9 @@ function AdminTopBar({ activeKey, username, role, avatarUrl, onLogout }) {
           type="button"
           className="ap-topbar__logout"
           onClick={onLogout}
-          title="Sign out"
         >
           <LogOut size={16} />
+          <span className="ap-topbar__tooltip">Sign out</span>
         </button>
       </div>
     </header>
@@ -256,6 +256,7 @@ export default function AdminDashboardPage() {
         onSelect={setActiveKey}
         isOpen={isSidebarOpen}
         onToggle={() => setIsSidebarOpen((prev) => !prev)}
+        onLogout={handleLogout}
       />
 
       <div className="ap-content">
