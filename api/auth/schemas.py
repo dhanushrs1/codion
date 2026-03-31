@@ -4,6 +4,9 @@ Codion Auth — Pydantic schemas for OAuth2 request/response validation.
 
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -37,3 +40,51 @@ class SetupTokenResponse(BaseModel):
     token_type: str = "bearer"
     status: str       # "pending_username"
     message: str
+
+
+class AdminActivityEventRequest(BaseModel):
+    """Payload to record admin/editor interactions from frontend events."""
+
+    activity_type: str = Field(
+        ...,
+        min_length=2,
+        max_length=64,
+        pattern=r"^[a-z0-9_:\-]+$",
+    )
+    activity_context: str | None = Field(default=None, max_length=64)
+    target_path: str | None = Field(default=None, max_length=256)
+    state: str | None = Field(default=None, max_length=128)
+    timezone: str | None = Field(default=None, max_length=64)
+    details: dict[str, Any] | None = None
+
+    model_config = {"extra": "forbid"}
+
+
+class AdminActivityLogItem(BaseModel):
+    """Single activity log entry returned to admin dashboard."""
+
+    id: int
+    user_id: int | None = None
+    username: str | None = None
+    role: str | None = None
+    activity_type: str
+    activity_context: str | None = None
+    target_path: str | None = None
+    ip_address: str | None = None
+    country: str | None = None
+    region: str | None = None
+    city: str | None = None
+    state: str | None = None
+    timezone: str | None = None
+    user_agent: str | None = None
+    details: dict[str, Any] | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AdminActivityLogListResponse(BaseModel):
+    """Paginated activity response for admin panel."""
+
+    items: list[AdminActivityLogItem]
+    total: int

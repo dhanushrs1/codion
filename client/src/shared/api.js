@@ -25,3 +25,66 @@ export function apiUrl(path) {
   // With explicit base: returns "http://some-host:port/path"
   return `${API_BASE}${path}`;
 }
+
+function readAccessToken() {
+  return localStorage.getItem("codion_token") ?? "";
+}
+
+/**
+ * Record admin/editor actions for audit logging.
+ * keepalive=true helps when this is called right before navigation.
+ */
+export async function logAdminActivity(payload) {
+  const token = readAccessToken();
+  if (!token) {
+    return { logged: false, reason: "missing-token" };
+  }
+
+  try {
+    const response = await fetch(apiUrl("/auth/admin-activity"), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    });
+
+    if (!response.ok) {
+      return { logged: false, status: response.status };
+    }
+
+    return await response.json();
+  } catch {
+    return { logged: false, reason: "network-error" };
+  }
+}
+
+/**
+ * Retrieve the latest admin/editor audit logs for dashboard rendering.
+ */
+export async function fetchAdminActivityLogs({ limit = 25, offset = 0 } = {}) {
+  const token = readAccessToken();
+  if (!token) {
+    return { items: [], total: 0 };
+  }
+
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+
+  const response = await fetch(apiUrl(`/auth/admin-activity?${params.toString()}`), {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Unable to load admin activity logs (${response.status}).`);
+  }
+
+  return response.json();
+}

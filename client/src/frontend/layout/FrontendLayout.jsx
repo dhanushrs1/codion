@@ -4,6 +4,7 @@ import Header from "../components/Header/Header.jsx";
 import Footer from "../components/Footer/Footer.jsx";
 import AuthModal from "../components/AuthModal/AuthModal.jsx";
 import { APP_ROUTES } from "../../routes/paths.js";
+import { logAdminActivity } from "../../shared/api.js";
 import "./FrontendLayout.css";
 
 /*
@@ -81,6 +82,29 @@ export default function FrontendLayout() {
     navigate(APP_ROUTES.home);
   };
 
+  const handleAdminPanelEntry = () => {
+    const locale = typeof navigator !== "undefined" ? navigator.language : "";
+    const timezone =
+      typeof Intl !== "undefined"
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone || null
+        : null;
+
+    const stateFromLocale = locale.includes("-") ? locale.split("-")[1] : null;
+    const fromPath = typeof window !== "undefined" ? window.location.pathname : null;
+
+    void logAdminActivity({
+      activity_type: "admin_panel_button_click",
+      activity_context: "header_navigation",
+      target_path: APP_ROUTES.adminDashboard,
+      state: stateFromLocale,
+      timezone,
+      details: {
+        locale: locale || null,
+        from_path: fromPath,
+      },
+    });
+  };
+
   return (
     <>
       <Header
@@ -90,6 +114,7 @@ export default function FrontendLayout() {
         avatarUrl={avatarUrl}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onLogout={handleLogout}
+        onAdminPanelEntry={handleAdminPanelEntry}
       />
 
       <main style={{ minHeight: "calc(100vh - 400px)" }}>

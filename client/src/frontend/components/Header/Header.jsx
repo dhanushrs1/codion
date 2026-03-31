@@ -72,6 +72,7 @@ export default function Header({
   avatarUrl = "",
   onOpenAuthModal,
   onLogout,
+  onAdminPanelEntry,
 }) {
   const [isMegaMenuOpen, setIsMegaMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -81,6 +82,7 @@ export default function Header({
   const megaMenuRef = useRef(null);
   const profileMenuRef = useRef(null);
   const hasMegaMenuItems = MEGA_MENU_ITEMS.length > 0;
+  const isElevatedUser = userRole === "ADMIN" || userRole === "EDITOR";
 
   useEffect(() => {
     if (isMobileMenuOpen) {
@@ -123,6 +125,12 @@ export default function Header({
     setIsMegaMenuOpen(false);
     setIsProfileMenuOpen(false);
     setIsMobileMenuOpen(true);
+  };
+
+  const handleElevatedPanelClick = () => {
+    if (typeof onAdminPanelEntry === "function") {
+      onAdminPanelEntry();
+    }
   };
 
   return (
@@ -203,14 +211,17 @@ export default function Header({
               </>
             ) : (
               <>
-                {userRole === "ADMIN" ? (
+                {isElevatedUser ? (
                   <Link
                     to={APP_ROUTES.adminDashboard}
                     className="btn btn-brand nav-dashboard-btn"
-                    aria-label="Open admin panel"
+                    aria-label="Open elevated panel"
+                    onClick={handleElevatedPanelClick}
                   >
                     <Shield size={15} />
-                    <span className="nav-dashboard-label">Admin</span>
+                    <span className="nav-dashboard-label">
+                      {userRole === "EDITOR" ? "Editor" : "Admin"}
+                    </span>
                   </Link>
                 ) : (
                   <Link

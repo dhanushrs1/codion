@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, ForeignKey
+from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -28,6 +28,7 @@ class User(Base):
     last_login = Column(DateTime, nullable=True)
 
     sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
+    activity_logs = relationship("AdminActivityLog", back_populates="user")
 
     def __repr__(self) -> str:
         return f"<User id={self.id} username={self.username!r} role={self.role!r}>"
@@ -47,3 +48,32 @@ class UserSession(Base):
 
     def __repr__(self) -> str:
         return f"<UserSession id={self.id} user_id={self.user_id} login_time={self.login_time}>"
+
+
+class AdminActivityLog(Base):
+    __tablename__ = "admin_activity_logs"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    username = Column(String(64), nullable=True, index=True)
+    role = Column(String(32), nullable=True, index=True)
+    activity_type = Column(String(64), nullable=False, index=True)
+    activity_context = Column(String(64), nullable=True)
+    target_path = Column(String(256), nullable=True)
+    ip_address = Column(String(64), nullable=True)
+    country = Column(String(64), nullable=True)
+    region = Column(String(128), nullable=True)
+    city = Column(String(128), nullable=True)
+    state = Column(String(128), nullable=True)
+    timezone = Column(String(64), nullable=True)
+    user_agent = Column(String(512), nullable=True)
+    details = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    user = relationship("User", back_populates="activity_logs")
+
+    def __repr__(self) -> str:
+        return (
+            f"<AdminActivityLog id={self.id} username={self.username!r} "
+            f"activity_type={self.activity_type!r} created_at={self.created_at}>"
+        )
