@@ -86,14 +86,17 @@ def _is_elevated_role(role: str | None) -> bool:
 
 
 def _extract_client_ip(request: Request) -> str | None:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",", 1)[0].strip()
-
+    # Prefer X-Real-IP — NGINX sets this to $remote_addr (the actual client IP)
+    # before any X-Forwarded-For chain is appended, so it is the most reliable.
     for header_name in ("x-real-ip", "cf-connecting-ip", "x-client-ip"):
         value = request.headers.get(header_name)
         if value:
             return value.strip()
+
+    # Fall back to X-Forwarded-For first hop (only if the above headers are absent)
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",", 1)[0].strip()
 
     if request.client:
         return request.client.host
@@ -101,29 +104,50 @@ def _extract_client_ip(request: Request) -> str | None:
     return None
 
 
-def _extract_geo_headers(request: Request) -> dict[str, str | None]:
-    def _first_value(keys: tuple[str, ...]) -> str | None:
-        for key in keys:
-            value = request.headers.get(key)
-            if value:
-                return value.strip()
-        return None
+# Private/loopback CIDRs — skip geo lookup for these
+_PRIVATE_IP_PREFIXES = (
+    "127.", "10.", "192.168.", "172.16.", "172.17.", "172.18.",
+    "172.19.", "172.20.", "172.21.", "172.22.", "172.23.", "172.24.",
+    "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.",
+    "172.31.", "::1", "fc", "fd",
+)
 
-    country = _first_value(
-        ("x-vercel-ip-country", "cf-ipcountry", "x-appengine-country", "x-country-code")
-    )
-    region = _first_value(
-        (
-            "x-vercel-ip-country-region",
-            "x-region",
-            "x-appengine-region",
-            "cf-region-code",
-            "x-geo-region",
-        )
-    )
-    city = _first_value(("x-vercel-ip-city", "cf-ipcity", "x-appengine-city", "x-city"))
 
-    return {"country": country, "region": region, "city": city}
+def _is_private_ip(ip: str | None) -> bool:
+    if not ip:
+        return True
+    return any(ip.startswith(prefix) for prefix in _PRIVATE_IP_PREFIXES)
+
+
+async def _lookup_geo(ip: str | None) -> dict[str, str | None]:
+    """Resolve an IP to country/region/city via ip-api.com (free, no key needed).
+
+    Returns a dict with keys country, region, city — all possibly None.
+    Always safe: any network/parse error returns Nones.
+    """
+    empty: dict[str, str | None] = {"country": None, "region": None, "city": None}
+
+    if _is_private_ip(ip):
+        return empty
+
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(
+                f"http://ip-api.com/json/{ip}",
+                params={"fields": "status,country,regionName,city"},
+            )
+            if resp.status_code != 200:
+                return empty
+            data = resp.json()
+            if data.get("status") != "success":
+                return empty
+            return {
+                "country": data.get("country") or None,
+                "region": data.get("regionName") or None,
+                "city": data.get("city") or None,
+            }
+    except Exception:
+        return empty
 
 
 async def _get_authenticated_user(
@@ -158,9 +182,14 @@ async def _record_activity(
     details: dict[str, Any] | None = None,
     state: str | None = None,
     timezone: str | None = None,
+    resolve_geo: bool = False,
     commit: bool = True,
 ) -> AdminActivityLog:
-    geo = _extract_geo_headers(request)
+    ip = _extract_client_ip(request)
+    geo: dict[str, str | None] = {"country": None, "region": None, "city": None}
+    if resolve_geo:
+        geo = await _lookup_geo(ip)
+
     sanitized_details = details if isinstance(details, dict) else None
 
     log = AdminActivityLog(
@@ -170,7 +199,7 @@ async def _record_activity(
         activity_type=activity_type,
         activity_context=activity_context,
         target_path=target_path,
-        ip_address=_extract_client_ip(request),
+        ip_address=ip,
         country=geo["country"],
         region=geo["region"],
         city=geo["city"],
@@ -223,6 +252,7 @@ async def _handle_oauth_profile(
                 activity_type="auth_login",
                 activity_context="oauth_callback",
                 target_path="/auth/callback",
+                resolve_geo=True,
                 commit=False,
             )
 
@@ -530,6 +560,7 @@ async def logout_user(
                 activity_type="auth_logout",
                 activity_context="header_profile_menu",
                 target_path="/auth/logout",
+                resolve_geo=True,
                 commit=False,
             )
 

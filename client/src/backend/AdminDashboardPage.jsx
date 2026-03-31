@@ -1,278 +1,276 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { AlertCircle, RefreshCw } from "lucide-react";
-import { getRuntimeOrigin } from "../config/runtime.js";
+import { useState, useEffect, useCallback } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  LayoutDashboard,
+  Users,
+  LogOut,
+  Globe,
+  ChevronRight,
+  ShieldCheck,
+  ChevronLeft,
+  Menu,
+} from "lucide-react";
 import { APP_ROUTES } from "../routes/paths.js";
-import { fetchAdminActivityLogs, logAdminActivity } from "../shared/api.js";
-import AdminOverviewCards from "./dashboard/AdminOverviewCards.jsx";
-import AdminSidebar from "./sidebar/AdminSidebar.jsx";
+import { apiUrl } from "../shared/api.js";
 import "./AdminDashboardPage.css";
 
-const ELEVATED_ROLES = new Set(["ADMIN", "EDITOR"]);
+// ── Sidebar items ──────────────────────────────────────────────────────────
 
-function formatAuditTime(value) {
-  if (!value) {
-    return "-";
-  }
+const NAV_ITEMS = [
+  { key: "overview", label: "Overview", icon: LayoutDashboard },
+  { key: "users", label: "User Management", icon: Users },
+];
 
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "-";
-  }
+// ── Live clock ─────────────────────────────────────────────────────────────
 
-  return date.toLocaleString();
+function useLiveClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
 }
 
-function formatLocation(logItem) {
-  const segments = [logItem.city, logItem.state || logItem.region, logItem.country].filter(Boolean);
-  return segments.length ? segments.join(", ") : "Unknown";
+// ── Sidebar ────────────────────────────────────────────────────────────────
+
+function AdminSidebar({ activeKey, onSelect, isOpen, onToggle }) {
+  const VERSION = import.meta.env.VITE_APP_VERSION ?? "1.0.0";
+
+  return (
+    <aside className={`ap-sidebar ${isOpen ? "ap-sidebar--open" : "ap-sidebar--closed"}`}>
+      {/* Brand row with toggle */}
+      <div className="ap-sidebar__top">
+        {isOpen ? (
+          <div className="ap-sidebar__brandArea">
+            <Link to={APP_ROUTES.home} className="ap-sidebar__brand">
+              Cod<span style={{ color: "var(--accent-primary)" }}>ion</span>
+            </Link>
+            <span className="ap-sidebar__adminTag">ADMIN</span>
+          </div>
+        ) : (
+          <div className="ap-sidebar__brandArea ap-sidebar__brandArea--closed">
+            <ShieldCheck size={22} className="ap-sidebar__shieldIcon" />
+          </div>
+        )}
+
+        <button 
+          className="ap-sidebar__toggle" 
+          onClick={onToggle}
+          title={isOpen ? "Close sidebar" : "Open sidebar"}
+        >
+          {isOpen ? <ChevronLeft size={18} /> : <Menu size={18} />}
+        </button>
+      </div>
+
+      {/* Nav */}
+      <nav className="ap-sidebar__nav" aria-label="Admin navigation">
+        {NAV_ITEMS.map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            type="button"
+            className={`ap-sidebar__item ${activeKey === key ? "ap-sidebar__item--active" : ""}`}
+            onClick={() => onSelect(key)}
+          >
+            <Icon size={18} className="ap-sidebar__itemIcon" />
+            
+            {isOpen && <span className="ap-sidebar__itemLabel">{label}</span>}
+            {isOpen && activeKey === key && <ChevronRight size={14} className="ap-sidebar__chevron" />}
+            
+            {/* Custom Tooltip for closed state */}
+            {!isOpen && (
+              <span className="ap-sidebar__tooltip">{label}</span>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      {/* Footer (only version now) */}
+      <div className="ap-sidebar__footer">
+        {isOpen ? (
+          <p className="ap-sidebar__version">v{VERSION}</p>
+        ) : (
+          <p className="ap-sidebar__version ap-sidebar__version--closed">v</p>
+        )}
+      </div>
+    </aside>
+  );
 }
+
+// ── Top bar ────────────────────────────────────────────────────────────────
+
+function AdminTopBar({ activeKey, username, role, avatarUrl, onLogout }) {
+  const now = useLiveClock();
+
+  const pageTitle = NAV_ITEMS.find((i) => i.key === activeKey)?.label ?? "Dashboard";
+
+  const timeStr = now.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+  return (
+    <header className="ap-topbar">
+      <div className="ap-topbar__left">
+        <h1 className="ap-topbar__title">{pageTitle}</h1>
+      </div>
+
+      <div className="ap-topbar__right">
+        {/* Clock */}
+        <div className="ap-topbar__clock">
+          <span className="ap-topbar__time">{timeStr}</span>
+        </div>
+
+        {/* Visit site */}
+        <Link
+          className="ap-topbar__visitBtn"
+          to={APP_ROUTES.home}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <Globe size={14} />
+          Visit Site
+        </Link>
+        
+        <div className="ap-topbar__divider"></div>
+
+        {/* User Profile Info */}
+        <div className="ap-topbar__userProfile">
+          <div className="ap-topbar__userInfo">
+            <span className="ap-topbar__userName">@{username || "admin"}</span>
+            <span className="ap-topbar__userRole">{role || "ADMIN"}</span>
+          </div>
+          <div className="ap-topbar__avatar" aria-label={`Signed in as ${username}`}>
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={username} />
+            ) : (
+              <span>{(username || "A")[0].toUpperCase()}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Logout */}
+        <button
+          type="button"
+          className="ap-topbar__logout"
+          onClick={onLogout}
+          title="Sign out"
+        >
+          <LogOut size={16} />
+        </button>
+      </div>
+    </header>
+  );
+}
+
+// ── Pages ──────────────────────────────────────────────────────────────────
+
+function OverviewPage() {
+  return (
+    <div className="ap-page">
+      <div className="ap-page__empty">
+        <LayoutDashboard size={40} strokeWidth={1.2} />
+        <h2>Overview</h2>
+        <p>Dashboard metrics and summaries will appear here.</p>
+      </div>
+    </div>
+  );
+}
+
+function UsersPage() {
+  return (
+    <div className="ap-page">
+      <div className="ap-page__empty">
+        <Users size={40} strokeWidth={1.2} />
+        <h2>User Management</h2>
+        <p>View, search, and manage user accounts from here.</p>
+      </div>
+    </div>
+  );
+}
+
+// ── Access denied ──────────────────────────────────────────────────────────
+
+function AccessDenied() {
+  return (
+    <main className="ap-denied">
+      <div className="ap-denied__card">
+        <ShieldCheck size={36} />
+        <h1>Access Restricted</h1>
+        <p>This panel is available only to admins and editors.</p>
+        <Link className="ap-denied__link" to={APP_ROUTES.frontendDashboard}>
+          Go to Dashboard
+        </Link>
+      </div>
+    </main>
+  );
+}
+
+// ── Root ───────────────────────────────────────────────────────────────────
+
+const ELEVATED = new Set(["ADMIN", "EDITOR"]);
 
 export default function AdminDashboardPage() {
-  const runtimeOrigin = getRuntimeOrigin();
-  const [viewerRole, setViewerRole] = useState("USER");
-  const [viewerName, setViewerName] = useState("guest");
-  const [activityLogs, setActivityLogs] = useState([]);
-  const [totalLogs, setTotalLogs] = useState(0);
-  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
-  const [logsError, setLogsError] = useState("");
+  const navigate = useNavigate();
+
+  const [role, setRole] = useState("USER");
+  const [username, setUsername] = useState("guest");
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [activeKey, setActiveKey] = useState("overview");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   useEffect(() => {
-    const nextRole = (localStorage.getItem("codion_role") || "USER").toUpperCase();
-    const nextName = localStorage.getItem("codion_username") || "guest";
-    setViewerRole(nextRole);
-    setViewerName(nextName);
+    setRole((localStorage.getItem("codion_role") || "USER").toUpperCase());
+    setUsername(localStorage.getItem("codion_username") || "guest");
+    setAvatarUrl(localStorage.getItem("codion_avatar_url") || "");
   }, []);
 
-  const isElevatedUser = ELEVATED_ROLES.has(viewerRole);
-
-  const buildClientAuditMeta = () => {
-    const locale = typeof navigator !== "undefined" ? navigator.language : "";
-    const timezone =
-      typeof Intl !== "undefined"
-        ? Intl.DateTimeFormat().resolvedOptions().timeZone || null
-        : null;
-
-    const stateFromLocale = locale.includes("-") ? locale.split("-")[1] : null;
-
-    return {
-      locale,
-      timezone,
-      stateFromLocale,
-    };
-  };
-
-  const refreshLogs = async () => {
-    if (!isElevatedUser) {
-      return;
-    }
-
-    setIsLoadingLogs(true);
-    setLogsError("");
-
+  const handleLogout = useCallback(async () => {
     try {
-      const response = await fetchAdminActivityLogs({ limit: 30, offset: 0 });
-      setActivityLogs(Array.isArray(response.items) ? response.items : []);
-      setTotalLogs(Number(response.total) || 0);
-    } catch (error) {
-      setLogsError(error instanceof Error ? error.message : "Unable to load admin activity logs.");
-    } finally {
-      setIsLoadingLogs(false);
+      const token = localStorage.getItem("codion_token");
+      if (token) {
+        await fetch(apiUrl("/auth/logout"), {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          keepalive: true,
+        });
+      }
+    } catch {
+      // ignore
     }
-  };
-
-  const handleSidebarSelect = (itemKey) => {
-    const auditMeta = buildClientAuditMeta();
-
-    void logAdminActivity({
-      activity_type: "admin_sidebar_click",
-      activity_context: itemKey,
-      target_path: APP_ROUTES.adminDashboard,
-      state: auditMeta.stateFromLocale,
-      timezone: auditMeta.timezone,
-      details: {
-        locale: auditMeta.locale || null,
-      },
-    });
-  };
-
-  useEffect(() => {
-    if (!isElevatedUser) {
-      return;
-    }
-
-    const auditMeta = buildClientAuditMeta();
-
-    void logAdminActivity({
-      activity_type: "admin_panel_visit",
-      activity_context: "admin_dashboard_page",
-      target_path: APP_ROUTES.adminDashboard,
-      state: auditMeta.stateFromLocale,
-      timezone: auditMeta.timezone,
-      details: {
-        locale: auditMeta.locale || null,
-      },
-    });
-
-    void refreshLogs();
-  }, [isElevatedUser]);
-
-  const summary = useMemo(() => {
-    const now = Date.now();
-    const todayIso = new Date().toISOString().slice(0, 10);
-    let todayVisits = 0;
-    let adminActions = 0;
-    let editorActions = 0;
-    let lastSixHours = 0;
-
-    activityLogs.forEach((item) => {
-      const normalizedRole = (item.role || "").toUpperCase();
-      const createdAt = Date.parse(item.created_at || "");
-
-      if (!Number.isNaN(createdAt) && now - createdAt <= 6 * 60 * 60 * 1000) {
-        lastSixHours += 1;
-      }
-
-      if (
-        (item.activity_type === "admin_panel_visit" || item.activity_type === "admin_panel_button_click") &&
-        String(item.created_at || "").startsWith(todayIso)
-      ) {
-        todayVisits += 1;
-      }
-
-      if (normalizedRole === "ADMIN") {
-        adminActions += 1;
-      }
-      if (normalizedRole === "EDITOR") {
-        editorActions += 1;
-      }
-    });
-
-    return {
-      todayVisits,
-      adminActions,
-      editorActions,
-      lastSixHours,
-    };
-  }, [activityLogs]);
-
-  if (!isElevatedUser) {
-    return (
-      <main className="adminDashboardPage adminDashboardPage--limited">
-        <section className="adminDashboardPage__limitedCard">
-          <h1>Admin Access Required</h1>
-          <p>This panel is available only for ADMIN and EDITOR roles.</p>
-          <div className="adminDashboardPage__limitedActions">
-            <Link className="btn btn-brand" to={APP_ROUTES.home}>
-              Go Home
-            </Link>
-            <Link className="btn btn-ghost" to={APP_ROUTES.frontendDashboard}>
-              Open User Dashboard
-            </Link>
-          </div>
-        </section>
-      </main>
+    ["codion_token", "codion_role", "codion_username", "codion_avatar_url"].forEach(
+      (k) => localStorage.removeItem(k)
     );
+    navigate(APP_ROUTES.home);
+  }, [navigate]);
+
+  if (!ELEVATED.has(role)) {
+    return <AccessDenied />;
   }
 
   return (
-    <main className="adminDashboardPage">
-      <div className="adminDashboardPage__layout">
-        <AdminSidebar
-          activeKey="overview"
-          role={viewerRole}
-          username={viewerName}
-          onSelect={handleSidebarSelect}
+    <main className={`ap-root ${isSidebarOpen ? "sidebar-open" : "sidebar-closed"}`}>
+      <AdminSidebar
+        activeKey={activeKey}
+        onSelect={setActiveKey}
+        isOpen={isSidebarOpen}
+        onToggle={() => setIsSidebarOpen((prev) => !prev)}
+      />
+
+      <div className="ap-content">
+        <AdminTopBar 
+          activeKey={activeKey} 
+          username={username} 
+          role={role}
+          avatarUrl={avatarUrl} 
+          onLogout={handleLogout}
         />
 
-        <section className="adminDashboardPage__main">
-          <header className="adminDashboardPage__header">
-            <div>
-              <p className="adminDashboardPage__eyebrow">Audit + Monitoring</p>
-              <h1>Admin Dashboard</h1>
-              <p>
-                Route: <strong>{APP_ROUTES.adminDashboard}</strong> | Runtime: {runtimeOrigin || "local"}
-              </p>
-              <p className="adminDashboardPage__meta">Tracked activity records: {totalLogs}</p>
-            </div>
-
-            <div className="adminDashboardPage__headerActions">
-              <button type="button" className="btn btn-ghost" onClick={() => void refreshLogs()}>
-                <RefreshCw size={14} />
-                Refresh Logs
-              </button>
-              <Link className="btn btn-brand" to={APP_ROUTES.frontendDashboard}>
-                User Dashboard
-              </Link>
-            </div>
-          </header>
-
-          <AdminOverviewCards summary={summary} />
-
-          <section className="adminDashboardPage__panel">
-            <div className="adminDashboardPage__panelTop">
-              <h2>Recent Admin Activity</h2>
-              <p>
-                Includes button clicks, panel visits, sign-in events, and sign-out events with IP and location
-                headers.
-              </p>
-            </div>
-
-            {isLoadingLogs ? (
-              <p className="adminDashboardPage__status">Loading logs...</p>
-            ) : null}
-
-            {!isLoadingLogs && logsError ? (
-              <p className="adminDashboardPage__status adminDashboardPage__status--error">
-                <AlertCircle size={14} />
-                {logsError}
-              </p>
-            ) : null}
-
-            {!isLoadingLogs && !logsError && activityLogs.length === 0 ? (
-              <p className="adminDashboardPage__status">No activity has been recorded yet.</p>
-            ) : null}
-
-            {!isLoadingLogs && !logsError && activityLogs.length > 0 ? (
-              <div className="adminDashboardPage__tableWrap">
-                <table className="adminDashboardPage__table">
-                  <thead>
-                    <tr>
-                      <th>Time</th>
-                      <th>User</th>
-                      <th>Role</th>
-                      <th>Activity</th>
-                      <th>Path</th>
-                      <th>Location</th>
-                      <th>IP</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activityLogs.map((item) => (
-                      <tr key={item.id}>
-                        <td>{formatAuditTime(item.created_at)}</td>
-                        <td>{item.username || "unknown"}</td>
-                        <td>
-                          <span
-                            className={`adminDashboardPage__roleTag adminDashboardPage__roleTag--${
-                              (item.role || "unknown").toLowerCase()
-                            }`}
-                          >
-                            {item.role || "UNKNOWN"}
-                          </span>
-                        </td>
-                        <td>{item.activity_type}</td>
-                        <td>{item.target_path || "-"}</td>
-                        <td>{formatLocation(item)}</td>
-                        <td>{item.ip_address || "-"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
-          </section>
-        </section>
+        <div className="ap-body">
+          {activeKey === "overview" && <OverviewPage />}
+          {activeKey === "users" && <UsersPage />}
+        </div>
       </div>
     </main>
   );
