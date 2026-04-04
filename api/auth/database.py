@@ -30,6 +30,14 @@ async def init_db() -> None:
         except Exception:
             # Column already exists or backend does not support this ALTER variant.
             pass
+            
+        try:
+            # Lightweight startup migration for the new avatar column.
+            await conn.execute(
+                text("ALTER TABLE users ADD COLUMN avatar VARCHAR(512) DEFAULT NULL")
+            )
+        except Exception:
+            pass
 
 
 async def get_db():  # type: ignore[return]

@@ -34,7 +34,7 @@ export default function AuthModal({ isOpen, onClose, onAuthenticate }) {
     setError("");
 
     try {
-      const res = await fetch(`${API_BASE}/auth/complete-profile`, {
+      const res = await fetch(apiUrl("/auth/complete-profile"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

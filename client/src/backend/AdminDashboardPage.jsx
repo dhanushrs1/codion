@@ -9,16 +9,28 @@ import {
   ShieldCheck,
   ChevronLeft,
   Menu,
+  Layers,
+  BookOpen,
+  Map,
+  Puzzle
 } from "lucide-react";
 import { APP_ROUTES } from "../routes/paths.js";
 import { apiUrl } from "../shared/api.js";
 import UserManagement from "./users/UserManagement.jsx";
+import TrackManagement from "./curriculum/TrackManagement.jsx";
+import SectionManagement from "./curriculum/SectionManagement.jsx";
+import ExerciseManagement from "./curriculum/ExerciseManagement.jsx";
+import TaskManagement from "./curriculum/TaskManagement.jsx";
 import "./AdminDashboardPage.css";
 
 // ── Sidebar items ──────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
   { key: "overview", label: "Overview", icon: LayoutDashboard },
+  { key: "tracks", label: "Tracks", icon: Map },
+  { key: "sections", label: "Sections", icon: Layers },
+  { key: "exercises", label: "Exercises", icon: BookOpen },
+  { key: "tasks", label: "Tasks", icon: Puzzle },
   { key: "users", label: "User Management", icon: Users },
 ];
 
@@ -88,6 +100,10 @@ function AdminSidebar({ activeKey, onSelect, isOpen, onToggle, onLogout }) {
 
       {/* Footer */}
       <div className="ap-sidebar__footer">
+        <button type="button" className="ap-sidebar__logoutItem" onClick={onLogout}>
+          <LogOut size={16} />
+          {isOpen && <span>Sign out</span>}
+        </button>
         {isOpen ? (
           <p className="ap-sidebar__version">Version: v{VERSION}</p>
         ) : (
@@ -100,7 +116,7 @@ function AdminSidebar({ activeKey, onSelect, isOpen, onToggle, onLogout }) {
 
 // ── Top bar ────────────────────────────────────────────────────────────────
 
-function AdminTopBar({ activeKey, username, role, avatarUrl, onLogout }) {
+function AdminTopBar({ activeKey, username, role, avatarUrl, onLogout, isLoggingOut }) {
   const now = useLiveClock();
 
   const pageTitle = NAV_ITEMS.find((i) => i.key === activeKey)?.label ?? "Dashboard";
@@ -150,16 +166,6 @@ function AdminTopBar({ activeKey, username, role, avatarUrl, onLogout }) {
             )}
           </div>
         </div>
-
-        {/* Logout */}
-        <button
-          type="button"
-          className="ap-topbar__logout"
-          onClick={onLogout}
-        >
-          <LogOut size={16} />
-          <span className="ap-topbar__tooltip">Sign out</span>
-        </button>
       </div>
     </header>
   );
@@ -210,11 +216,35 @@ export default function AdminDashboardPage() {
   const [avatarUrl, setAvatarUrl] = useState("");
   const [activeKey, setActiveKey] = useState("overview");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // Cross-tab navigation state
+  const [drilldownTrackId, setDrilldownTrackId] = useState(null);
+  const [drilldownSectionId, setDrilldownSectionId] = useState(null);
+  const [drilldownExerciseId, setDrilldownExerciseId] = useState(null);
+
+  const handleSelectTrack = (trackId) => {
+    setDrilldownTrackId(trackId);
+    setActiveKey("sections");
+  };
+
+  const handleSelectSection = (sectionId) => {
+    setDrilldownSectionId(sectionId);
+    setActiveKey("exercises");
+  };
+
+  const handleSelectExercise = (exerciseId) => {
+    setDrilldownExerciseId(exerciseId);
+    setActiveKey("tasks");
+  };
 
   const clearSessionAndRedirect = useCallback(() => {
-    ["codion_token", "codion_role", "codion_username", "codion_avatar_url"].forEach(
+    ["codion_token", "codion_role", "codion_username", "codion_avatar_url", "codion_setup_token"].forEach(
       (k) => localStorage.removeItem(k)
     );
+    setRole("USER");
+    setUsername("guest");
+    setAvatarUrl("");
     navigate(APP_ROUTES.home, { replace: true });
   }, [navigate]);
 
@@ -277,6 +307,8 @@ export default function AdminDashboardPage() {
   }, [handleSessionExpired]);
 
   const handleLogout = useCallback(async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
     try {
       const token = localStorage.getItem("codion_token");
       if (token) {
@@ -288,9 +320,11 @@ export default function AdminDashboardPage() {
       }
     } catch {
       // ignore
+    } finally {
+      setIsLoggingOut(false);
+      clearSessionAndRedirect();
     }
-    clearSessionAndRedirect();
-  }, [clearSessionAndRedirect]);
+  }, [clearSessionAndRedirect, isLoggingOut]);
 
   if (!ELEVATED.has(role)) {
     return <AccessDenied />;
@@ -313,10 +347,15 @@ export default function AdminDashboardPage() {
           role={role}
           avatarUrl={avatarUrl} 
           onLogout={handleLogout}
+          isLoggingOut={isLoggingOut}
         />
 
         <div className="ap-body">
           {activeKey === "overview" && <OverviewPage />}
+          {activeKey === "tracks" && <TrackManagement onSelectTrack={handleSelectTrack} />}
+          {activeKey === "sections" && <SectionManagement initialTrackId={drilldownTrackId} onSelectSection={handleSelectSection} />}
+          {activeKey === "exercises" && <ExerciseManagement initialSectionId={drilldownSectionId} onSelectExercise={handleSelectExercise} />}
+          {activeKey === "tasks" && <TaskManagement initialExerciseId={drilldownExerciseId} />}
           {activeKey === "users" && (
             <UserManagement
               role={role}

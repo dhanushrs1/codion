@@ -6,7 +6,13 @@ import {
   User as UserIcon, 
   PenTool, 
   Loader2,
-  X 
+  X,
+  MoreVertical,
+  History,
+  Ban,
+  ShieldCheck,
+  MonitorSmartphone,
+  Globe2
 } from "lucide-react";
 import { apiUrl } from "../../shared/api.js";
 import "./UserManagement.css";
@@ -35,7 +41,147 @@ function normalizeUserRecord(user) {
     ban_reason: user?.ban_reason ?? null,
     created_at: user?.created_at ?? new Date().toISOString(),
     last_login: user?.last_login ?? null,
+    avatar: user?.avatar || null,
   };
+}
+
+
+
+function ActivityModal({ user, onClose, onSessionExpired }) {
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchActivities = async () => {
+      try {
+        const token = localStorage.getItem("codion_token");
+        const res = await fetch(apiUrl(`/auth/admin/users/${user.id}/sessions`), {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.status === 401) {
+          onSessionExpired?.();
+          throw new Error(SESSION_EXPIRED_ERROR);
+        }
+        if (!res.ok) throw new Error("Failed to fetch sessions.");
+        const data = await res.json();
+        setSessions(data);
+      } catch (err) {
+        if (err.message !== SESSION_EXPIRED_ERROR) setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchActivities();
+  }, [user.id, onSessionExpired]);
+
+  return (
+    <div className="um-modal-overlay">
+      <div className="um-modal um-modal--large">
+        <div className="um-modal__header">
+          <h3>Activity Log: @{user.username}</h3>
+          <button className="um-modal__close" onClick={onClose}><X size={18} /></button>
+        </div>
+        <div className="um-activity-content">
+          {loading ? (
+            <div className="um-activity-empty"><Loader2 className="um-spin" size={24} /></div>
+          ) : error ? (
+            <div className="um-activity-empty" style={{ color: 'var(--state-error)' }}>{error}</div>
+          ) : sessions.length === 0 ? (
+            <div className="um-activity-empty">No activity found for this user.</div>
+          ) : (
+            <div className="um-timeline">
+              {sessions.map((session, i) => (
+                <div key={session.id} className="um-timeline-item">
+                  <div className={`um-timeline-dot ${i === 0 && !session.logout_time ? 'um-timeline-dot--active' : 'um-timeline-dot--login'}`} />
+                  <div className="um-timeline-card">
+                    <div className="um-timeline-header">
+                      <span className={`um-timeline-status ${!session.logout_time ? 'um-timeline-status--online' : ''}`}>
+                        {!session.logout_time ? "Active Session" : "Logged Out"}
+                      </span>
+                      <span className="um-timeline-time">
+                        {new Date(session.login_time).toLocaleString(undefined, {
+                          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                        })}
+                      </span>
+                    </div>
+                    <div className="um-timeline-details">
+                      {session.ip_address && (
+                        <p><Globe2 size={12} /> {session.ip_address}</p>
+                      )}
+                      {session.device_info && (
+                        <p><MonitorSmartphone size={12} /> {session.device_info}</p>
+                      )}
+                      {session.logout_time && (
+                        <p><History size={12} /> Logged out at {new Date(session.logout_time).toLocaleTimeString(undefined, {hour: '2-digit', minute:'2-digit'})}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RoleModal({ user, currentRole, onClose, onConfirm }) {
+  const [role, setRole] = useState(currentRole);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onConfirm(user.id, role);
+  };
+
+  const options = [
+    { value: "student", label: "Student", desc: "Standard user account with base permissions." },
+    { value: "editor", label: "Editor", desc: "Can manage curriculum tasks and edit content." },
+    { value: "admin", label: "Admin", desc: "Full access to user management and platform settings." }
+  ];
+
+  if (!user) return null;
+
+  return (
+    <div className="um-modal-overlay">
+      <div className="um-modal">
+        <div className="um-modal__header">
+          <h3>Change Role: @{user.username}</h3>
+          <button className="um-modal__close" onClick={onClose}><X size={18} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="um-modal__body">
+          <p className="um-modal__desc">
+            Select a new role for this user. Click Save changes in the table row to apply it globally.
+          </p>
+          <div className="um-input-group">
+            {options.map((opt) => (
+              <label 
+                key={opt.value} 
+                className={`um-role-option ${role === opt.value ? 'um-role-option--selected' : ''}`}
+              >
+                <input 
+                  type="radio" 
+                  name="role" 
+                  value={opt.value} 
+                  checked={role === opt.value} 
+                  onChange={() => setRole(opt.value)} 
+                />
+                <div className="um-role-option__info">
+                  <strong>{opt.label}</strong>
+                  <span>{opt.desc}</span>
+                </div>
+              </label>
+            ))}
+          </div>
+          <div className="um-modal__actions">
+            <button type="button" className="um-btn um-btn--ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className="um-btn um-btn--primary">Apply Role</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 function BanModal({ user, onClose, onConfirm }) {
@@ -96,11 +242,17 @@ export default function UserManagement({
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [banModalUser, setBanModalUser] = useState(null);
+  const [roleModalUser, setRoleModalUser] = useState(null);
+  const [activityModalUser, setActivityModalUser] = useState(null);
+  const [dropdownOpenId, setDropdownOpenId] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
   const [pendingChanges, setPendingChanges] = useState({});
+
+  const closeDropdown = () => setDropdownOpenId(null);
 
   const clearPendingForUser = (userId) => {
     setPendingChanges((prev) => {
@@ -149,7 +301,7 @@ export default function UserManagement({
     });
   };
 
-  const fetchUsers = async () => {
+  const fetchUsers = async ({ silent = false } = {}) => {
     if (!canViewUsers) {
       setUsers([]);
       setPendingChanges({});
@@ -158,7 +310,10 @@ export default function UserManagement({
     }
 
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
+      setIsRefreshing(true);
       setErrorMessage("");
 
       const token = localStorage.getItem("codion_token");
@@ -180,7 +335,13 @@ export default function UserManagement({
         throw new Error(data?.detail ?? `Unable to load users (${res.status}).`);
       }
 
-      const normalizedUsers = Array.isArray(data) ? data.map(normalizeUserRecord) : [];
+      const rawUsers = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.items)
+          ? data.items
+          : [];
+
+      const normalizedUsers = rawUsers.map(normalizeUserRecord);
       setUsers(normalizedUsers);
       setPendingChanges({});
     } catch (e) {
@@ -192,12 +353,23 @@ export default function UserManagement({
       setErrorMessage(e instanceof Error ? e.message : "Failed to load users.");
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
     fetchUsers();
   }, [canViewUsers]);
+
+  useEffect(() => {
+    const handleDocumentClick = (e) => {
+      if (dropdownOpenId !== null && !e.target.closest('.um-actions-wrapper')) {
+        setDropdownOpenId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleDocumentClick);
+    return () => document.removeEventListener("mousedown", handleDocumentClick);
+  }, [dropdownOpenId]);
 
   const handleSaveAllChanges = async (e) => {
     if (e) e.preventDefault();
@@ -467,7 +639,13 @@ export default function UserManagement({
                   <tr key={user.id} className={!effectiveIsActive ? "um-row-banned" : ""}>
                     <td>
                       <div className="um-user-cell">
-                        <div className="um-avatar">{initial}</div>
+                        <div className="um-avatar" style={{ background: user.avatar ? 'transparent' : '', border: user.avatar ? '1px solid var(--border-light)' : '' }}>
+                          {user.avatar ? (
+                            <img src={user.avatar} alt={user.username} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                          ) : (
+                            initial
+                          )}
+                        </div>
                         <div className="um-user-info">
                           <span className="um-name">
                             {fullName}
@@ -513,36 +691,51 @@ export default function UserManagement({
                     </td>
 
                     <td>
-                      {canManageUsers ? (
-                        <div className="um-actions um-actions--stacked">
-                          <div className="um-actions__row">
-                            <select
-                              className="um-role-select"
-                              value={effectiveRole}
-                              onChange={(e) => stageRoleChange(user.id, e.target.value, user.role)}
-                              disabled={isMe || actionLoading === "global-save"}
-                            >
-                              <option value="student">Student</option>
-                              <option value="editor">Editor</option>
-                              <option value="admin">Admin</option>
-                            </select>
-
-                            <button
-                              type="button"
-                              className={`um-ban-btn ${effectiveIsActive ? "um-ban-btn--ban" : "um-ban-btn--unban"}`}
-                              disabled={isMe || actionLoading === "global-save"}
-                              onClick={() => {
-                                if (effectiveIsActive) {
-                                  setBanModalUser({ ...user, is_active: effectiveIsActive });
-                                } else {
-                                  stageStatusChange(user.id, true, null);
-                                }
-                              }}
-                              title={effectiveIsActive ? "Stage ban" : "Stage unban"}
-                            >
-                              {effectiveIsActive ? "Ban" : "Unban"}
-                            </button>
-                          </div>
+                      {canManageUsers && !isMe ? (
+                        <div className="um-actions-wrapper">
+                          <button 
+                            className={`um-action-kebab ${dropdownOpenId === user.id ? 'um-action-kebab--active' : ''}`}
+                            onClick={() => setDropdownOpenId(dropdownOpenId === user.id ? null : user.id)}
+                            title="Actions"
+                          >
+                            <MoreVertical size={16} />
+                          </button>
+                          
+                          {dropdownOpenId === user.id && (
+                            <div className="um-dropdown">
+                              <button 
+                                className="um-dropdown-item"
+                                onClick={() => {
+                                  closeDropdown();
+                                  setActivityModalUser(user);
+                                }}
+                              >
+                                <History size={14} /> View Activity
+                              </button>
+                              <button 
+                                className="um-dropdown-item"
+                                onClick={() => {
+                                  closeDropdown();
+                                  setRoleModalUser({ ...user, role: effectiveRole });
+                                }}
+                              >
+                                <ShieldCheck size={14} /> Change Role
+                              </button>
+                              <button 
+                                className="um-dropdown-item um-dropdown-item--danger"
+                                onClick={() => {
+                                  closeDropdown();
+                                  if (effectiveIsActive) {
+                                    setBanModalUser({ ...user, is_active: effectiveIsActive });
+                                  } else {
+                                    stageStatusChange(user.id, true, null);
+                                  }
+                                }}
+                              >
+                                <Ban size={14} /> {effectiveIsActive ? "Ban User" : "Unban User"}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <span className="um-provider">Read only</span>
@@ -564,6 +757,26 @@ export default function UserManagement({
             stageStatusChange(userId, false, reason);
             setBanModalUser(null);
           }}
+        />
+      )}
+
+      {roleModalUser && (
+        <RoleModal
+          user={roleModalUser}
+          currentRole={roleModalUser.role}
+          onClose={() => setRoleModalUser(null)}
+          onConfirm={(userId, role) => {
+            stageRoleChange(userId, role, roleModalUser.role);
+            setRoleModalUser(null);
+          }}
+        />
+      )}
+
+      {activityModalUser && (
+        <ActivityModal
+          user={activityModalUser}
+          onClose={() => setActivityModalUser(null)}
+          onSessionExpired={onSessionExpired}
         />
       )}
     </div>

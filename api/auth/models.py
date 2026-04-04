@@ -22,6 +22,7 @@ class User(Base):
     last_name = Column(String(128), nullable=True)
     username = Column(String(64), unique=True, index=True, nullable=False)
     auth_provider = Column(String(32), nullable=False)   # "google" | "github"
+    avatar = Column(String(512), nullable=True)          # Real profile image
     role = Column(String(32), nullable=False, default="student")
     session_version = Column(Integer, nullable=False, default=1)
     is_active = Column(Boolean, default=True, nullable=False)

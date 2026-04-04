@@ -4,6 +4,7 @@ import Header from "../components/Header/Header.jsx";
 import Footer from "../components/Footer/Footer.jsx";
 import AuthModal from "../components/AuthModal/AuthModal.jsx";
 import { APP_ROUTES } from "../../routes/paths.js";
+import { apiUrl } from "../../shared/api.js";
 import "./FrontendLayout.css";
 
 /*
@@ -59,7 +60,7 @@ export default function FrontendLayout() {
       const token = localStorage.getItem("codion_token");
       if (token) {
         // Assuming api.js exposes apiUrl, or we can just fetch relatively because frontend is proxied
-        await fetch("/auth/logout", {
+        await fetch(apiUrl("/auth/logout"), {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${token}`

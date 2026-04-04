@@ -42,6 +42,7 @@ from auth.schemas import (
     CompleteProfileRequest,
     SetupTokenResponse,
     AdminUserResponse,
+    UserSessionResponse,
     RoleUpdateRequest,
     BanUpdateRequest,
 )
@@ -112,6 +113,7 @@ def _serialize_admin_user(user: User) -> AdminUserResponse:
         ban_reason=(user.ban_reason or None),
         created_at=user.created_at or datetime.utcnow(),
         last_login=user.last_login,
+        avatar=user.avatar,
     )
 
 
@@ -307,6 +309,9 @@ async def _handle_oauth_profile(
             )
 
         user.last_login = datetime.utcnow()
+        if avatar_url and user.avatar != avatar_url:
+            user.avatar = avatar_url
+
         db.add(
             UserSession(
                 user_id=user.id,
@@ -554,6 +559,7 @@ async def complete_profile(
         auth_provider=provider,
         role="student",
         last_login=datetime.utcnow(),
+        avatar=avatar_url,
     )
     db.add(new_user)
 
@@ -605,6 +611,7 @@ async def get_authenticated_user(
         first_name=user.first_name,
         last_name=user.last_name,
         is_active=bool(user.is_active),
+        avatar=user.avatar,
     )
 
 
@@ -790,6 +797,35 @@ async def list_admin_users(
 
     users = (await db.scalars(query)).all()
     return [_serialize_admin_user(u) for u in users]
+
+
+@router.get(
+    "/admin/users/{user_id}/sessions",
+    response_model=list[UserSessionResponse],
+    summary="Get user activity logs (sessions) for admin panel",
+)
+async def get_user_sessions(
+    user_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> list[UserSessionResponse]:
+    _, normalized_role = await _get_authenticated_user(request, db)
+
+    if not _is_elevated_role(normalized_role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin/editor users can view user sessions.",
+        )
+
+    query = (
+        select(UserSession)
+        .where(UserSession.user_id == user_id)
+        .order_by(desc(UserSession.login_time))
+        .limit(limit)
+    )
+    sessions = (await db.scalars(query)).all()
+    return [UserSessionResponse.model_validate(s) for s in sessions]
 
 
 @router.post(

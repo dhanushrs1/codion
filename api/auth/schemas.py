@@ -43,6 +43,7 @@ class AuthenticatedUserResponse(BaseModel):
     first_name: str
     last_name: str | None = None
     is_active: bool
+    avatar: str | None = None
 
 
 class SetupTokenResponse(BaseModel):
@@ -66,6 +67,18 @@ class AdminUserResponse(BaseModel):
     ban_reason: str | None = None
     created_at: datetime
     last_login: datetime | None = None
+    avatar: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class UserSessionResponse(BaseModel):
+    """User login session history."""
+    id: int
+    login_time: datetime
+    logout_time: datetime | None = None
+    ip_address: str | None = None
+    device_info: str | None = None
 
     model_config = {"from_attributes": True}
 
