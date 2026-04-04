@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from auth.models import Base
@@ -21,6 +22,14 @@ async def init_db() -> None:
     """Create all tables on startup if they don't already exist."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        try:
+            # Lightweight startup migration for existing deployments.
+            await conn.execute(
+                text("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 1")
+            )
+        except Exception:
+            # Column already exists or backend does not support this ALTER variant.
+            pass
 
 
 async def get_db():  # type: ignore[return]

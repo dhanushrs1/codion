@@ -495,12 +495,10 @@ export default function UserManagement({
                     <td>
                       <div className="um-status-indicator">
                         <span className={`um-status-dot um-status-dot--${statusMeta.tone}`} />
-                        <span className={`um-status-text um-status-text--${statusMeta.tone}`}>
-                          {statusMeta.label}
-                        </span>
-                        <span className="um-status-help" title={statusMeta.help} aria-label={statusMeta.help}>
-                          ?
-                        </span>
+                        <div className="um-status-help-wrapper">
+                          <span className="um-status-help">?</span>
+                          <div className="um-status-tooltip">{statusMeta.help}</div>
+                        </div>
                       </div>
                     </td>
 

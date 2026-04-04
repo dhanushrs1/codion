@@ -275,20 +275,49 @@
 }
 
 .um-status-text {
-  font-size: 0.82rem;
-  font-weight: 600;
+  display: none;
 }
 
-.um-status-text--active {
-  color: #15803d;
+.um-status-help-wrapper {
+  position: relative;
+  display: inline-flex;
 }
 
-.um-status-text--pending {
-  color: #a16207;
+.um-status-tooltip {
+  position: absolute;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #111827;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  width: 180px;
+  text-align: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s;
+  pointer-events: none;
+  z-index: 10;
 }
 
-.um-status-text--banned {
-  color: #b91c1c;
+.um-status-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 4px;
+  border-style: solid;
+  border-color: #111827 transparent transparent transparent;
+}
+
+.um-status-help-wrapper:hover .um-status-tooltip {
+  opacity: 1;
+  visibility: visible;
+  bottom: 140%;
 }
 
 .um-status-help {

@@ -211,11 +211,70 @@ export default function AdminDashboardPage() {
   const [activeKey, setActiveKey] = useState("overview");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
+  const clearSessionAndRedirect = useCallback(() => {
+    ["codion_token", "codion_role", "codion_username", "codion_avatar_url"].forEach(
+      (k) => localStorage.removeItem(k)
+    );
+    navigate(APP_ROUTES.home, { replace: true });
+  }, [navigate]);
+
+  const handleSessionExpired = useCallback(() => {
+    clearSessionAndRedirect();
+  }, [clearSessionAndRedirect]);
+
   useEffect(() => {
     setRole((localStorage.getItem("codion_role") || "USER").toUpperCase());
     setUsername(localStorage.getItem("codion_username") || "guest");
     setAvatarUrl(localStorage.getItem("codion_avatar_url") || "");
   }, []);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const verifySession = async () => {
+      const token = localStorage.getItem("codion_token");
+      if (!token) {
+        return;
+      }
+
+      try {
+        const res = await fetch(apiUrl("/auth/me"), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (res.status === 401) {
+          if (isActive) {
+            handleSessionExpired();
+          }
+          return;
+        }
+
+        if (!res.ok) {
+          return;
+        }
+
+        const data = await res.json();
+        if (!isActive || !data) {
+          return;
+        }
+
+        const nextRole = String(data.role || "USER").toUpperCase();
+        const nextUsername = String(data.username || "guest");
+
+        setRole(nextRole);
+        setUsername(nextUsername);
+        localStorage.setItem("codion_role", nextRole);
+        localStorage.setItem("codion_username", nextUsername);
+      } catch {
+        // Ignore transient network failures; authorization is enforced by protected API endpoints.
+      }
+    };
+
+    verifySession();
+    return () => {
+      isActive = false;
+    };
+  }, [handleSessionExpired]);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -230,11 +289,8 @@ export default function AdminDashboardPage() {
     } catch {
       // ignore
     }
-    ["codion_token", "codion_role", "codion_username", "codion_avatar_url"].forEach(
-      (k) => localStorage.removeItem(k)
-    );
-    navigate(APP_ROUTES.home);
-  }, [navigate]);
+    clearSessionAndRedirect();
+  }, [clearSessionAndRedirect]);
 
   if (!ELEVATED.has(role)) {
     return <AccessDenied />;
@@ -261,7 +317,13 @@ export default function AdminDashboardPage() {
 
         <div className="ap-body">
           {activeKey === "overview" && <OverviewPage />}
-          {activeKey === "users" && <UserManagement role={role} username={username} />}
+          {activeKey === "users" && (
+            <UserManagement
+              role={role}
+              username={username}
+              onSessionExpired={handleSessionExpired}
+            />
+          )}
         </div>
       </div>
     </main>

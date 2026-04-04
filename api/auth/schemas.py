@@ -34,6 +34,17 @@ class AccessTokenResponse(BaseModel):
     avatar_url: str | None = None
 
 
+class AuthenticatedUserResponse(BaseModel):
+    """Current authenticated user details for session validation."""
+
+    username: str
+    role: str
+    email: str
+    first_name: str
+    last_name: str | None = None
+    is_active: bool
+
+
 class SetupTokenResponse(BaseModel):
     """Returned for new users who still need to choose a username."""
     setup_token: str
@@ -61,7 +72,7 @@ class AdminUserResponse(BaseModel):
 
 class RoleUpdateRequest(BaseModel):
     """Payload to change user's role."""
-    role: str = Field(..., pattern="^(admin|editor|student|ADMIN|EDITOR|USER)$")
+    role: str = Field(..., pattern="^(admin|editor|student|user|ADMIN|EDITOR|STUDENT|USER)$")
 
 
 class BanUpdateRequest(BaseModel):

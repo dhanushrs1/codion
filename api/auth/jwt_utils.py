@@ -35,9 +35,17 @@ def _decode(token: str) -> dict:
         )
 
 
-def create_access_token(username: str, role: str) -> str:
+def create_access_token(username: str, role: str, session_version: int = 1) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    return _encode({"sub": username, "role": role, "status": "active", "exp": expire})
+    return _encode(
+        {
+            "sub": username,
+            "role": role,
+            "status": "active",
+            "sv": int(session_version or 1),
+            "exp": expire,
+        }
+    )
 
 
 def create_setup_token(

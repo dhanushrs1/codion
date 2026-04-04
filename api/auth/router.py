@@ -35,6 +35,7 @@ from auth.jwt_utils import _decode, create_access_token, create_setup_token, ver
 from auth.models import AdminActivityLog, User, UserSession
 from auth.schemas import (
     AccessTokenResponse,
+    AuthenticatedUserResponse,
     AdminActivityEventRequest,
     AdminActivityLogItem,
     AdminActivityLogListResponse,
@@ -85,8 +86,42 @@ def _normalize_role(role: str | None) -> str:
     return (role or "").strip().upper()
 
 
+def _canonical_role(role: str | None) -> str:
+    normalized = (role or "").strip().lower()
+    if normalized in {"admin", "editor"}:
+        return normalized
+    if normalized in {"student", "user"}:
+        return "student"
+    return "student"
+
+
 def _is_elevated_role(role: str | None) -> bool:
     return _normalize_role(role) in ELEVATED_ROLES
+
+
+def _serialize_admin_user(user: User) -> AdminUserResponse:
+    return AdminUserResponse(
+        id=int(user.id or 0),
+        email=((user.email or "").strip() or "unknown@example.com"),
+        first_name=((user.first_name or "").strip() or "Unknown"),
+        last_name=((user.last_name or "").strip() or None),
+        username=((user.username or "").strip() or f"user_{user.id or 0}"),
+        auth_provider=((user.auth_provider or "oauth").strip() or "oauth"),
+        role=_canonical_role(user.role),
+        is_active=bool(user.is_active),
+        ban_reason=(user.ban_reason or None),
+        created_at=user.created_at or datetime.utcnow(),
+        last_login=user.last_login,
+    )
+
+
+def _token_session_version(payload: dict[str, Any]) -> int:
+    value = payload.get("sv", 1)
+    try:
+        version = int(value)
+    except (TypeError, ValueError):
+        version = 1
+    return version if version > 0 else 1
 
 
 def _extract_client_ip(request: Request) -> str | None:
@@ -171,6 +206,14 @@ async def _get_authenticated_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found.")
     
+    token_version = _token_session_version(payload)
+    user_version = int(user.session_version or 1)
+    if token_version != user_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired. Please log in again.",
+        )
+
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is banned.")
 
@@ -225,6 +268,22 @@ async def _record_activity(
     return log
 
 
+async def _invalidate_user_sessions(db: AsyncSession, user: User) -> None:
+    now = datetime.utcnow()
+    active_sessions = (
+        await db.scalars(
+            select(UserSession)
+            .where(UserSession.user_id == user.id)
+            .where(UserSession.logout_time.is_(None))
+        )
+    ).all()
+
+    for session in active_sessions:
+        session.logout_time = now
+
+    user.session_version = int(user.session_version or 1) + 1
+
+
 # ---------------------------------------------------------------------------
 # Shared intercept logic — always redirects browser to frontend
 # ---------------------------------------------------------------------------
@@ -273,7 +332,7 @@ async def _handle_oauth_profile(
         await db.commit()
         await db.refresh(user)
 
-        token = create_access_token(user.username, user.role)
+        token = create_access_token(user.username, user.role, int(user.session_version or 1))
         params = urlencode(
             {
                 "status": "active",
@@ -518,13 +577,34 @@ async def complete_profile(
             detail="Username or email conflict. Please try again.",
         )
 
-    token = create_access_token(new_user.username, new_user.role)
+    token = create_access_token(new_user.username, new_user.role, int(new_user.session_version or 1))
     return AccessTokenResponse(
         access_token=token,
         status="active",
         role=new_user.role,
         username=new_user.username,
         avatar_url=avatar_url,
+    )
+
+
+@router.get(
+    "/me",
+    response_model=AuthenticatedUserResponse,
+    summary="Get current authenticated user",
+)
+async def get_authenticated_user(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> AuthenticatedUserResponse:
+    user, normalized_role = await _get_authenticated_user(request, db)
+
+    return AuthenticatedUserResponse(
+        username=user.username,
+        role=normalized_role,
+        email=user.email,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        is_active=bool(user.is_active),
     )
 
 
@@ -697,7 +777,8 @@ async def list_admin_users(
     query = select(User)
 
     if role:
-        query = query.where(User.role == _normalize_role(role))
+        requested_role = _canonical_role(role)
+        query = query.where(func.lower(User.role) == requested_role)
 
     if search:
         s = f"%{search}%"
@@ -708,7 +789,7 @@ async def list_admin_users(
     query = query.order_by(User.created_at.desc()).limit(200)
 
     users = (await db.scalars(query)).all()
-    return [AdminUserResponse.model_validate(u) for u in users]
+    return [_serialize_admin_user(u) for u in users]
 
 
 @router.post(
@@ -740,17 +821,20 @@ async def update_user_role(
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found.")
 
-    target_user.role = payload.role.lower()
+    target_user.role = _canonical_role(payload.role)
 
     await _record_activity(
         db=db, request=request, user=admin_user, role=admin_role,
         activity_type="admin_update_role", activity_context=f"User {target_user.username}", target_path=f"/users/{user_id}",
-        details={"new_role": payload.role.lower()}
+        details={"new_role": target_user.role},
+        commit=False,
     )
+
+    await _invalidate_user_sessions(db, target_user)
 
     await db.commit()
     await db.refresh(target_user)
-    return AdminUserResponse.model_validate(target_user)
+    return _serialize_admin_user(target_user)
 
 
 @router.post(
@@ -789,9 +873,12 @@ async def update_user_status(
         db=db, request=request, user=admin_user, role=admin_role,
         activity_type="admin_ban_user" if not payload.is_active else "admin_unban_user",
         activity_context=f"User {target_user.username}", target_path=f"/users/{user_id}",
-        details={"reason": payload.ban_reason}
+        details={"reason": payload.ban_reason},
+        commit=False,
     )
+
+    await _invalidate_user_sessions(db, target_user)
 
     await db.commit()
     await db.refresh(target_user)
-    return AdminUserResponse.model_validate(target_user)
+    return _serialize_admin_user(target_user)

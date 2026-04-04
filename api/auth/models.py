@@ -23,6 +23,7 @@ class User(Base):
     username = Column(String(64), unique=True, index=True, nullable=False)
     auth_provider = Column(String(32), nullable=False)   # "google" | "github"
     role = Column(String(32), nullable=False, default="student")
+    session_version = Column(Integer, nullable=False, default=1)
     is_active = Column(Boolean, default=True, nullable=False)
     ban_reason = Column(String(256), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
