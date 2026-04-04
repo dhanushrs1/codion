@@ -1,10 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { 
   Search, 
-  MoreVertical, 
   ShieldAlert, 
-  UserX, 
-  UserCheck, 
   Shield, 
   User as UserIcon, 
   PenTool, 
@@ -14,6 +11,33 @@ import {
 import { apiUrl } from "../../shared/api.js";
 import "./UserManagement.css";
 
+const ELEVATED_ROLES = new Set(["ADMIN", "EDITOR"]);
+const SESSION_EXPIRED_ERROR = "__SESSION_EXPIRED__";
+
+function normalizeRole(role) {
+  const normalized = String(role ?? "").trim().toLowerCase();
+  if (normalized === "user") return "student";
+  return normalized || "student";
+}
+
+function normalizeUserRecord(user) {
+  const parsedId = Number(user?.id);
+
+  return {
+    id: Number.isFinite(parsedId) ? parsedId : -1,
+    email: String(user?.email ?? "").trim() || "unknown@example.com",
+    first_name: String(user?.first_name ?? "").trim() || "Unknown",
+    last_name: String(user?.last_name ?? "").trim(),
+    username: String(user?.username ?? "").trim() || "unknown",
+    auth_provider: String(user?.auth_provider ?? "oauth").trim() || "oauth",
+    role: normalizeRole(user?.role),
+    is_active: typeof user?.is_active === "boolean" ? user.is_active : true,
+    ban_reason: user?.ban_reason ?? null,
+    created_at: user?.created_at ?? new Date().toISOString(),
+    last_login: user?.last_login ?? null,
+  };
+}
+
 function BanModal({ user, onClose, onConfirm }) {
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
@@ -21,7 +45,7 @@ function BanModal({ user, onClose, onConfirm }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    await onConfirm(user.id, reason);
+    await onConfirm(user.id, reason, user.is_active);
     setLoading(false);
   };
 
@@ -36,7 +60,7 @@ function BanModal({ user, onClose, onConfirm }) {
         </div>
         <form onSubmit={handleSubmit} className="um-modal__body">
           <p className="um-modal__desc">
-            You are about to ban <strong>{user.first_name}</strong>. They will no longer be able to log in or create an account.
+            This will stage a ban for <strong>{user.first_name}</strong>. Click Save changes in the table row to apply it.
           </p>
           <div className="um-input-group">
             <label>Reason for Ban *</label>
@@ -51,7 +75,7 @@ function BanModal({ user, onClose, onConfirm }) {
           <div className="um-modal__actions">
             <button type="button" className="um-btn um-btn--ghost" onClick={onClose} disabled={loading}>Cancel</button>
             <button type="submit" className="um-btn um-btn--danger" disabled={loading || !reason.trim()}>
-              {loading ? <Loader2 size={16} className="um-spin" /> : "Confirm Ban"}
+              {loading ? <Loader2 size={16} className="um-spin" /> : "Stage Ban"}
             </button>
           </div>
         </form>
@@ -60,38 +84,112 @@ function BanModal({ user, onClose, onConfirm }) {
   );
 }
 
-export default function UserManagement({ role: currentUserRole, username: currentUsername }) {
+export default function UserManagement({
+  role: currentUserRole,
+  username: currentUsername,
+  onSessionExpired,
+}) {
+  const normalizedCurrentRole = (currentUserRole || "").toUpperCase();
+  const canViewUsers = ELEVATED_ROLES.has(normalizedCurrentRole);
+  const canManageUsers = normalizedCurrentRole === "ADMIN";
+
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [banModalUser, setBanModalUser] = useState(null);
-  const [actionLoading, setActionLoading] = useState(null); // track loading by user id
+  const [actionLoading, setActionLoading] = useState(null);
+  const [pendingChanges, setPendingChanges] = useState({});
 
-  if (currentUserRole !== "ADMIN") {
-    return (
-      <div className="um-restricted">
-        <ShieldAlert size={48} className="um-restricted__icon" />
-        <h2>Access Restricted</h2>
-        <p>You do not have permission to view User Management.</p>
-        <p className="um-restricted__sub">Only administrators can manage platform users and their roles.</p>
-      </div>
-    );
-  }
+  const clearPendingForUser = (userId) => {
+    setPendingChanges((prev) => {
+      if (!prev[userId]) return prev;
+      const next = { ...prev };
+      delete next[userId];
+      return next;
+    });
+  };
+
+  const stageRoleChange = (userId, nextRole, baseRole) => {
+    const normalizedNext = normalizeRole(nextRole);
+    const normalizedBase = normalizeRole(baseRole);
+
+    setPendingChanges((prev) => {
+      const existing = prev[userId] || {};
+      const next = { ...existing };
+
+      if (normalizedNext === normalizedBase) {
+        delete next.role;
+      } else {
+        next.role = normalizedNext;
+      }
+
+      if (next.role === undefined && next.is_active === undefined) {
+        const updated = { ...prev };
+        delete updated[userId];
+        return updated;
+      }
+
+      return { ...prev, [userId]: next };
+    });
+  };
+
+  const stageStatusChange = (userId, isActive, banReason = null) => {
+    setPendingChanges((prev) => {
+      const existing = prev[userId] || {};
+      return {
+        ...prev,
+        [userId]: {
+          ...existing,
+          is_active: !!isActive,
+          ban_reason: isActive ? null : (banReason || "No reason provided").trim(),
+        },
+      };
+    });
+  };
 
   const fetchUsers = async () => {
+    if (!canViewUsers) {
+      setUsers([]);
+      setPendingChanges({});
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
+      setErrorMessage("");
+
       const token = localStorage.getItem("codion_token");
-      const res = await fetch(apiUrl("/auth/admin/users"), {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setUsers(data);
+      if (!token) {
+        throw new Error("Session expired. Please sign in again.");
       }
+
+      const res = await fetch(apiUrl("/auth/admin/users"), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.status === 401) {
+        onSessionExpired?.();
+        throw new Error(SESSION_EXPIRED_ERROR);
+      }
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.detail ?? `Unable to load users (${res.status}).`);
+      }
+
+      const normalizedUsers = Array.isArray(data) ? data.map(normalizeUserRecord) : [];
+      setUsers(normalizedUsers);
+      setPendingChanges({});
     } catch (e) {
+      if (e instanceof Error && e.message === SESSION_EXPIRED_ERROR) {
+        return;
+      }
       console.error("Failed to fetch users", e);
+      setUsers([]);
+      setErrorMessage(e instanceof Error ? e.message : "Failed to load users.");
     } finally {
       setLoading(false);
     }
@@ -99,96 +197,219 @@ export default function UserManagement({ role: currentUserRole, username: curren
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [canViewUsers]);
 
-  const handleRoleChange = async (userId, newRole) => {
-    setActionLoading(userId);
+  const handleSaveAllChanges = async (e) => {
+    if (e) e.preventDefault();
+    if (!canManageUsers) return;
+
+    if (Object.keys(pendingChanges).length === 0) return;
+
+    setActionLoading("global-save");
     try {
       const token = localStorage.getItem("codion_token");
-      const res = await fetch(apiUrl(`/auth/admin/users/${userId}/role`), {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}` 
-        },
-        body: JSON.stringify({ role: newRole })
-      });
-      if (res.ok) {
-        const updatedUser = await res.json();
-        setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+      if (!token) {
+        throw new Error("Session expired. Please sign in again.");
       }
-    } finally {
-      setActionLoading(null);
-    }
-  };
 
-  const handleToggleBan = async (userId, reason = null, currentStatus) => {
-    setActionLoading(userId);
-    try {
-      const token = localStorage.getItem("codion_token");
-      const res = await fetch(apiUrl(`/auth/admin/users/${userId}/status`), {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}` 
-        },
-        body: JSON.stringify({ is_active: !currentStatus, ban_reason: reason })
-      });
-      if (res.ok) {
-        const updatedUser = await res.json();
-        setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+      setErrorMessage("");
+      
+      const newUsersList = [...users];
+
+      for (const [userIdStr, pending] of Object.entries(pendingChanges)) {
+        const userId = Number(userIdStr);
+        let userIndex = newUsersList.findIndex((u) => u.id === userId);
+        if (userIndex === -1) continue;
+        
+        let user = newUsersList[userIndex];
+        let latestUser = normalizeUserRecord(user);
+
+        if (
+          typeof pending.role === "string" &&
+          normalizeRole(pending.role) !== normalizeRole(user.role)
+        ) {
+          const roleRes = await fetch(apiUrl(`/auth/admin/users/${user.id}/role`), {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ role: pending.role }),
+          });
+
+          if (roleRes.status === 401) {
+            onSessionExpired?.();
+            throw new Error(SESSION_EXPIRED_ERROR);
+          }
+
+          const roleData = await roleRes.json().catch(() => null);
+          if (!roleRes.ok) {
+            throw new Error(roleData?.detail ?? `Unable to update role for user ${user.username}.`);
+          }
+
+          if (roleData) {
+            latestUser = normalizeUserRecord(roleData);
+          }
+        }
+
+        if (
+          typeof pending.is_active === "boolean" &&
+          pending.is_active !== Boolean(latestUser.is_active)
+        ) {
+          const statusRes = await fetch(apiUrl(`/auth/admin/users/${user.id}/status`), {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              is_active: pending.is_active,
+              ban_reason: pending.is_active
+                ? null
+                : (pending.ban_reason || latestUser.ban_reason || "No reason provided").trim(),
+            }),
+          });
+
+          if (statusRes.status === 401) {
+            onSessionExpired?.();
+            throw new Error(SESSION_EXPIRED_ERROR);
+          }
+
+          const statusData = await statusRes.json().catch(() => null);
+          if (!statusRes.ok) {
+            throw new Error(statusData?.detail ?? `Unable to update status for user ${user.username}.`);
+          }
+
+          if (statusData) {
+            latestUser = normalizeUserRecord(statusData);
+          }
+        }
+        
+        // Update user in the local array
+        newUsersList[userIndex] = latestUser;
       }
-      setBanModalUser(null);
+
+      setUsers(newUsersList);
+      setPendingChanges({});
+    } catch (e) {
+      if (e instanceof Error && e.message === SESSION_EXPIRED_ERROR) {
+        return;
+      }
+      console.error("Failed to save changes", e);
+      setErrorMessage(e instanceof Error ? e.message : "Failed to save changes.");
     } finally {
       setActionLoading(null);
     }
   };
 
   const filteredUsers = useMemo(() => {
-    return users.filter(user => {
-      if (roleFilter !== "all" && user.role !== roleFilter) return false;
+    return users.filter((user) => {
+      const pending = pendingChanges[user.id] || {};
+      const effectiveRole = normalizeRole(pending.role ?? user.role);
+
+      if (roleFilter !== "all" && effectiveRole !== roleFilter) return false;
+
       if (search) {
         const s = search.toLowerCase();
         return (
-          user.username.toLowerCase().includes(s) ||
-          user.email.toLowerCase().includes(s) ||
-          user.first_name.toLowerCase().includes(s)
+          String(user.username ?? "").toLowerCase().includes(s) ||
+          String(user.email ?? "").toLowerCase().includes(s) ||
+          String(user.first_name ?? "").toLowerCase().includes(s) ||
+          String(user.last_name ?? "").toLowerCase().includes(s)
         );
       }
       return true;
     });
-  }, [users, search, roleFilter]);
+  }, [users, search, roleFilter, pendingChanges]);
 
   const getRoleIcon = (role) => {
-    if (role === "admin") return <Shield size={14} />;
-    if (role === "editor") return <PenTool size={14} />;
+    const normalized = normalizeRole(role);
+    if (normalized === "admin") return <Shield size={14} />;
+    if (normalized === "editor") return <PenTool size={14} />;
     return <UserIcon size={14} />;
   };
+
+  const getStatusMeta = (effectiveIsActive, hasPending) => {
+    if (hasPending) {
+      return {
+        tone: "pending",
+        label: "Pending",
+        help: "Yellow dot: you have unsaved changes for this user. Click Save changes to apply.",
+      };
+    }
+    if (!effectiveIsActive) {
+      return {
+        tone: "banned",
+        label: "Banned",
+        help: "Red dot: this account is banned and cannot sign in.",
+      };
+    }
+    return {
+      tone: "active",
+      label: "Active",
+      help: "Green dot: this account is active and can sign in.",
+    };
+  };
+
+  if (!canViewUsers) {
+    return (
+      <div className="um-restricted">
+        <ShieldAlert size={48} className="um-restricted__icon" />
+        <h2>Access Restricted</h2>
+        <p>You do not have permission to view User Management.</p>
+        <p className="um-restricted__sub">
+          Only administrators and editors can view users. Only administrators can change roles and status.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="um-container">
       <div className="um-header">
-        <div>
+        <div className="um-header-content">
           <h2 className="um-title">User Management</h2>
-          <p className="um-subtitle">Manage roles, secure accounts, and oversee platform access.</p>
+          <p className="um-subtitle">Edit users in draft mode, then click Save changes to apply.</p>
         </div>
+        
+        {Object.keys(pendingChanges).length > 0 && canManageUsers && (
+          <div className="um-global-actions">
+            <button
+              type="button"
+              className="um-reset-btn"
+              disabled={actionLoading === "global-save"}
+              onClick={() => setPendingChanges({})}
+            >
+              Discard all
+            </button>
+            <button
+              type="button"
+              className="um-save-btn"
+              disabled={actionLoading === "global-save"}
+              onClick={handleSaveAllChanges}
+            >
+              {actionLoading === "global-save" ? "Saving..." : "Save changes"}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="um-controls">
         <div className="um-search">
           <Search size={16} className="um-search__icon" />
-          <input 
-            type="text" 
-            placeholder="Search by name, @username, or email..." 
+          <input
+            type="text"
+            placeholder="Search by name, @username, or email..."
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        
+
         <div className="um-filters">
-          {["all", "admin", "editor", "student"].map(r => (
-            <button 
+          {["all", "admin", "editor", "student"].map((r) => (
+            <button
               key={r}
+              type="button"
               className={`um-filter-btn ${roleFilter === r ? "um-filter-btn--active" : ""}`}
               onClick={() => setRoleFilter(r)}
             >
@@ -214,29 +435,42 @@ export default function UserManagement({ role: currentUserRole, username: curren
             {loading ? (
               <tr>
                 <td colSpan="6" className="um-table__empty">
-                  <Loader2 size={24} className="um-spin" style={{ color: "var(--text-secondary)" }}/>
+                  <Loader2 size={24} className="um-spin" style={{ color: "var(--text-secondary)" }} />
                 </td>
+              </tr>
+            ) : errorMessage ? (
+              <tr>
+                <td colSpan="6" className="um-table__empty">{errorMessage}</td>
               </tr>
             ) : filteredUsers.length === 0 ? (
               <tr>
                 <td colSpan="6" className="um-table__empty">No users found.</td>
               </tr>
             ) : (
-              filteredUsers.map(user => {
-                const isMe = user.username === currentUsername;
-                const isBanned = !user.is_active;
+              filteredUsers.map((user) => {
+                const pending = pendingChanges[user.id] || {};
+                const isMe =
+                  String(user.username || "").toLowerCase() ===
+                  String(currentUsername || "").toLowerCase();
+
+                const effectiveRole = normalizeRole(pending.role ?? user.role);
+                const effectiveIsActive =
+                  typeof pending.is_active === "boolean" ? pending.is_active : Boolean(user.is_active);
+                const hasPending =
+                  pending.role !== undefined || pending.is_active !== undefined;
+
+                const fullName = `${user.first_name || "Unknown"} ${user.last_name || ""}`.trim();
+                const initial = (fullName.charAt(0) || "?").toUpperCase();
+                const statusMeta = getStatusMeta(effectiveIsActive, hasPending);
 
                 return (
-                  <tr key={user.id} className={isBanned ? "um-row-banned" : ""}>
-                    {/* User Profile */}
+                  <tr key={user.id} className={!effectiveIsActive ? "um-row-banned" : ""}>
                     <td>
                       <div className="um-user-cell">
-                        <div className="um-avatar">
-                          {user.first_name[0].toUpperCase()}
-                        </div>
+                        <div className="um-avatar">{initial}</div>
                         <div className="um-user-info">
                           <span className="um-name">
-                            {user.first_name} {user.last_name || ""}
+                            {fullName}
                             {isMe && <span className="um-badge-me">You</span>}
                           </span>
                           <span className="um-username">@{user.username}</span>
@@ -244,7 +478,6 @@ export default function UserManagement({ role: currentUserRole, username: curren
                       </div>
                     </td>
 
-                    {/* Email / Auth */}
                     <td>
                       <div className="um-email-cell">
                         <span>{user.email}</span>
@@ -252,59 +485,70 @@ export default function UserManagement({ role: currentUserRole, username: curren
                       </div>
                     </td>
 
-                    {/* Role */}
                     <td>
-                      <div className={`um-role-badge um-role-badge--${user.role}`}>
-                        {getRoleIcon(user.role)}
-                        {user.role}
+                      <div className={`um-role-badge um-role-badge--${effectiveRole}`}>
+                        {getRoleIcon(effectiveRole)}
+                        {effectiveRole}
                       </div>
                     </td>
 
-                    {/* Status */}
                     <td>
-                      {isBanned ? (
-                        <div className="um-status-badge um-status-badge--banned" title={user.ban_reason}>
-                          <UserX size={14} /> Banned
-                        </div>
-                      ) : (
-                        <div className="um-status-badge um-status-badge--active">
-                          <UserCheck size={14} /> Active
-                        </div>
-                      )}
+                      <div className="um-status-indicator">
+                        <span className={`um-status-dot um-status-dot--${statusMeta.tone}`} />
+                        <span className={`um-status-text um-status-text--${statusMeta.tone}`}>
+                          {statusMeta.label}
+                        </span>
+                        <span className="um-status-help" title={statusMeta.help} aria-label={statusMeta.help}>
+                          ?
+                        </span>
+                      </div>
                     </td>
 
-                    {/* Joined */}
                     <td>
                       <span className="um-date">
                         {new Date(user.created_at).toLocaleDateString(undefined, {
-                          year: 'numeric', month: 'short', day: 'numeric'
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
                         })}
                       </span>
                     </td>
 
-                    {/* Actions */}
                     <td>
-                      <div className="um-actions">
-                        <select 
-                          className="um-role-select"
-                          value={user.role}
-                          onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                          disabled={isMe || actionLoading === user.id}
-                        >
-                          <option value="student">Student</option>
-                          <option value="editor">Editor</option>
-                          <option value="admin">Admin</option>
-                        </select>
-                        
-                        <button 
-                          className={`um-ban-btn ${isBanned ? "um-ban-btn--unban" : "um-ban-btn--ban"}`}
-                          disabled={isMe || actionLoading === user.id}
-                          onClick={() => isBanned ? handleToggleBan(user.id, null, false) : setBanModalUser(user)}
-                          title={isBanned ? "Unban user" : "Ban user"}
-                        >
-                          {isBanned ? "Unban" : "Ban"}
-                        </button>
-                      </div>
+                      {canManageUsers ? (
+                        <div className="um-actions um-actions--stacked">
+                          <div className="um-actions__row">
+                            <select
+                              className="um-role-select"
+                              value={effectiveRole}
+                              onChange={(e) => stageRoleChange(user.id, e.target.value, user.role)}
+                              disabled={isMe || actionLoading === "global-save"}
+                            >
+                              <option value="student">Student</option>
+                              <option value="editor">Editor</option>
+                              <option value="admin">Admin</option>
+                            </select>
+
+                            <button
+                              type="button"
+                              className={`um-ban-btn ${effectiveIsActive ? "um-ban-btn--ban" : "um-ban-btn--unban"}`}
+                              disabled={isMe || actionLoading === "global-save"}
+                              onClick={() => {
+                                if (effectiveIsActive) {
+                                  setBanModalUser({ ...user, is_active: effectiveIsActive });
+                                } else {
+                                  stageStatusChange(user.id, true, null);
+                                }
+                              }}
+                              title={effectiveIsActive ? "Stage ban" : "Stage unban"}
+                            >
+                              {effectiveIsActive ? "Ban" : "Unban"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="um-provider">Read only</span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -315,10 +559,13 @@ export default function UserManagement({ role: currentUserRole, username: curren
       </div>
 
       {banModalUser && (
-        <BanModal 
-          user={banModalUser} 
+        <BanModal
+          user={banModalUser}
           onClose={() => setBanModalUser(null)}
-          onConfirm={handleToggleBan}
+          onConfirm={async (userId, reason) => {
+            stageStatusChange(userId, false, reason);
+            setBanModalUser(null);
+          }}
         />
       )}
     </div>

@@ -6,6 +6,15 @@
 
 .um-header {
   margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.um-global-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
 }
 
 .um-title {
@@ -237,21 +246,64 @@
   color: #4b5563;
 }
 
-.um-status-badge {
+.um-status-indicator {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.85rem;
+  gap: 8px;
+}
+
+.um-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.um-status-dot--active {
+  background: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.18);
+}
+
+.um-status-dot--pending {
+  background: #eab308;
+  box-shadow: 0 0 0 2px rgba(234, 179, 8, 0.18);
+}
+
+.um-status-dot--banned {
+  background: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.18);
+}
+
+.um-status-text {
+  font-size: 0.82rem;
   font-weight: 600;
 }
 
-.um-status-badge--active {
-  color: #059669;
+.um-status-text--active {
+  color: #15803d;
 }
 
-.um-status-badge--banned {
-  color: #dc2626;
+.um-status-text--pending {
+  color: #a16207;
+}
+
+.um-status-text--banned {
+  color: #b91c1c;
+}
+
+.um-status-help {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid #d1d5db;
+  color: #6b7280;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
   cursor: help;
+  user-select: none;
 }
 
 .um-date {
@@ -264,6 +316,18 @@
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.um-actions--stacked {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.um-actions__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .um-role-select {
@@ -320,6 +384,47 @@
 
 .um-ban-btn--unban:not(:disabled):hover {
   background: #d1fae5;
+}
+
+.um-save-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #ffffff;
+  background: #2563eb;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.um-save-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.um-save-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.um-reset-btn {
+  padding: 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #4b5563;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.um-reset-btn:hover:not(:disabled) {
+  background: #f9fafb;
+}
+
+.um-reset-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Spin animation */
