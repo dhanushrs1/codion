@@ -48,5 +48,30 @@ export const reorderExercises = (item_ids) => request("/api/admin/exercises/reor
 // Tasks
 export const getTasks = (exerciseId) => request(`/api/admin/exercises/${exerciseId}/tasks`);
 export const createTask = (exerciseId, data) => request(`/api/admin/exercises/${exerciseId}/tasks`, { method: "POST", body: JSON.stringify(data) });
+export const updateTask = (taskId, data) => request(`/api/admin/tasks/${taskId}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteTask = (id) => request(`/api/admin/tasks/${id}`, { method: "DELETE" });
 export const reorderTasks = (item_ids) => request("/api/admin/tasks/reorder", { method: "PUT", body: JSON.stringify({ item_ids }) });
+
+/**
+ * Bulk-save an exercise's full task list.
+ * For each task: if it has an id → PUT (update), else → POST (create).
+ * Runs sequentially to preserve ordering.
+ */
+export async function bulkSaveTasks(exerciseId, tasks) {
+  const results = [];
+  for (const task of tasks) {
+    const payload = {
+      step_number: task.step_number,
+      instructions_md: task.instructions_md,
+      starter_code: task.files ? JSON.stringify(task.files) : (task.starter_code ?? null),
+      solution_code: task.solution_code ?? null,
+      test_cases: task.test_cases ?? [],
+    };
+    if (task.id) {
+      results.push(await request(`/api/admin/tasks/${task.id}`, { method: "PUT", body: JSON.stringify(payload) }));
+    } else {
+      results.push(await request(`/api/admin/exercises/${exerciseId}/tasks`, { method: "POST", body: JSON.stringify(payload) }));
+    }
+  }
+  return results;
+}

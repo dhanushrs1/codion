@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { Plus, ExternalLink, AlertCircle } from "lucide-react";
+import { Plus, ExternalLink, ArrowLeft } from "lucide-react";
 import { getTracks, getSections, getExercises, createExercise, deleteExercise, reorderExercises } from "../../shared/curriculumApi.js";
 import { DeleteConfirmButton } from "../shared/DeleteConfirmButton.jsx";
+import ExerciseStudio from "./ExerciseStudio.jsx";
 import "./CurriculumManagement.css";
 
 export default function ExerciseManagement({ initialSectionId, onSelectExercise }) {
@@ -18,6 +19,9 @@ export default function ExerciseManagement({ initialSectionId, onSelectExercise 
   
   const [title, setTitle] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Studio mode: { id, title } of the exercise being edited, or null
+  const [editingExercise, setEditingExercise] = useState(null);
 
   useEffect(() => {
     loadTracks();
@@ -103,7 +107,6 @@ export default function ExerciseManagement({ initialSectionId, onSelectExercise 
   }
 
   async function handleDelete(id) {
-
     try {
       await deleteExercise(id);
       await loadExercises(selectedSectionId);
@@ -140,6 +143,17 @@ export default function ExerciseManagement({ initialSectionId, onSelectExercise 
       setError("Failed to reorder exercises: " + err.message);
       await loadExercises(selectedSectionId);
     }
+  }
+
+  // ── Studio Mode ────────────────────────────────────────────
+  if (editingExercise) {
+    return (
+      <ExerciseStudio
+        exerciseId={editingExercise.id}
+        exerciseTitle={editingExercise.title}
+        onBack={() => setEditingExercise(null)}
+      />
+    );
   }
 
   return (
@@ -179,7 +193,7 @@ export default function ExerciseManagement({ initialSectionId, onSelectExercise 
       <div className="ap-curriculum-panel__header">
         <div>
           <h2>Exercises Catalog</h2>
-          <p>Create focused coding exercises containing multiple hands-on tasks.</p>
+          <p>Create focused coding exercises. Click <strong>Edit Tasks</strong> to open the Exercise Authoring Studio.</p>
         </div>
       </div>
 
@@ -204,12 +218,12 @@ export default function ExerciseManagement({ initialSectionId, onSelectExercise 
       {selectedSectionId && (
         <div className="ap-curriculum-panel__content">
           <div className="ap-curriculum-panel__form-card">
-            <h3>Create New Exercise in this Section</h3>
+            <h3>Create New Exercise</h3>
             {error && <div className="ap-curriculum-panel__error">{error}</div>}
             <form className="ap-curriculum-panel__form" onSubmit={handleCreate}>
               <div className="ap-curriculum-form-group">
                 <label>Title</label>
-                <input value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="e.g. Iterating arrays" />
+                <input value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="e.g. Mastering For Loops" />
               </div>
               <button type="submit" disabled={isSubmitting || !title.trim()} className="ap-curriculum-panel__btn">
                 <Plus size={16} /> Add Exercise
@@ -218,11 +232,11 @@ export default function ExerciseManagement({ initialSectionId, onSelectExercise 
           </div>
 
           <div className="ap-curriculum-panel__list-card">
-            <h3>Existing Exercises</h3>
+            <h3>Exercises in this Section</h3>
             {loading ? (
-              <p>Loading exercises...</p>
+              <p>Loading exercises…</p>
             ) : exercises.length === 0 ? (
-              <p className="ap-curriculum-panel__empty">No exercises in this section.</p>
+              <p className="ap-curriculum-panel__empty">No exercises in this section yet.</p>
             ) : (
               <ul className="ap-curriculum-panel__list">
                 {exercises.map((exercise, idx) => (
@@ -236,8 +250,13 @@ export default function ExerciseManagement({ initialSectionId, onSelectExercise 
                       <span className="ap-curriculum-panel__item-desc">Order {exercise.order}</span>
                     </div>
                     <div className="ap-curriculum-panel__item-actions">
-                      <button type="button" className="ap-curriculum-panel__icon-btn" title="Manage Tasks in this Exercise" onClick={() => onSelectExercise(exercise.id)}>
-                        <ExternalLink size={16} /> Tasks
+                      <button
+                        type="button"
+                        className="ap-curriculum-panel__icon-btn ap-curriculum-panel__icon-btn--studio"
+                        title="Open Exercise Authoring Studio"
+                        onClick={() => setEditingExercise({ id: exercise.id, title: exercise.title })}
+                      >
+                        <ExternalLink size={14} /> Edit Tasks
                       </button>
                       <DeleteConfirmButton onConfirm={() => handleDelete(exercise.id)} />
                     </div>

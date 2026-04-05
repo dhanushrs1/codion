@@ -78,14 +78,68 @@ def _run_process(cmd: list[str], stdin: str | None = None) -> tuple[str, str, in
         return "", f"Interpreter/compiler not found: {e}", -1
 
 
+def _normalize(text: str) -> str:
+    """Normalize output for comparison: strip edges, collapse inner whitespace."""
+    return " ".join(text.lower().split())
+
+
+def _check_output(actual: str, job: dict) -> bool:
+    """
+    Smart output checker supporting 3 modes:
+
+    - "normalize" (default): strip + lowercase + collapse whitespace.
+      Handles trailing newlines, extra spaces, and minor case differences.
+    - "exact": byte-for-byte match after stripping only the final newline.
+    - "any_of": pass if actual matches ANY string in expected_outputs list.
+      Each candidate is checked under the current match_mode.
+
+    The job dict may carry:
+      expected_output  (str)        — legacy single-value field
+      expected_outputs (list[str])  — new multi-value field (preferred)
+      match_mode       (str)        — "normalize" | "exact" | "any_of"
+    """
+    mode = str(job.get("match_mode", "normalize")).lower()
+
+    # Build candidate list from either the new or legacy field
+    candidates: list[str] = job.get("expected_outputs") or []
+    if not candidates:
+        legacy = job.get("expected_output")
+        if legacy:
+            candidates = [legacy]
+
+    if not candidates:
+        # No expected output defined → just run, don't grade
+        return True
+
+    def _matches_one(actual_s: str, expected_s: str) -> bool:
+        if mode == "exact":
+            return actual_s.rstrip("\n") == expected_s.rstrip("\n")
+        # normalize mode (default for both "normalize" and "any_of" per-candidate)
+        return _normalize(actual_s) == _normalize(expected_s)
+
+    if mode == "any_of":
+        return any(_matches_one(actual, c) for c in candidates)
+    else:
+        # For "normalize" and "exact" just check against all candidates (any match wins)
+        return any(_matches_one(actual, c) for c in candidates)
+
+
 def execute_job(job: dict) -> dict:
     """
     Execute source code for the given language.
     Always returns a result dict — never raises.
+
+    Verdict hierarchy (checked in order):
+      Time Limit Exceeded  — process killed after CPU_LIMIT seconds
+      Compilation Error    — compiler returned non-zero
+      Runtime Error        — interpreter/runner returned non-zero
+      Wrong Answer         — output did not match any accepted output
+      Accepted             — output matched at least one accepted output
+                             (or no expected outputs were defined → free run)
     """
     source_code: str = job.get("source_code", "")
     language_id: int = job.get("language_id", 0)
-    expected_output: str | None = job.get("expected_output")
+    stdin_data: str | None = job.get("stdin")
 
     runner = LANGUAGE_RUNNERS.get(language_id)
     if not runner:
@@ -101,7 +155,6 @@ def execute_job(job: dict) -> dict:
     start_time = time.monotonic()
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        # For Java: file must be named Main.java
         filename = "Main" if language_id == 62 else "solution"
         src_path = os.path.join(tmpdir, filename + ext)
         out_path = os.path.join(tmpdir, filename)
@@ -109,7 +162,7 @@ def execute_job(job: dict) -> dict:
         with open(src_path, "w", encoding="utf-8") as f:
             f.write(source_code)
 
-        # Compile step (optional)
+        # ── Compile (optional) ───────────────────────────────────────
         if "compile" in runner:
             compile_cmd = _substitute(runner["compile"], src_path, out_path, tmpdir)
             _, compile_err, rc = _run_process(compile_cmd)
@@ -122,9 +175,9 @@ def execute_job(job: dict) -> dict:
                     "time": f"{time.monotonic() - start_time:.3f}",
                 }
 
-        # Run step
+        # ── Run ──────────────────────────────────────────────────────
         run_cmd = _substitute(runner["run"], src_path, out_path, tmpdir)
-        stdout, stderr, rc = _run_process(run_cmd)
+        stdout, stderr, rc = _run_process(run_cmd, stdin=stdin_data)
 
         elapsed = f"{time.monotonic() - start_time:.3f}"
 
@@ -132,7 +185,7 @@ def execute_job(job: dict) -> dict:
             verdict = "Time Limit Exceeded"
         elif rc != 0:
             verdict = "Runtime Error"
-        elif expected_output and stdout.strip() != expected_output.strip():
+        elif not _check_output(stdout, job):
             verdict = "Wrong Answer"
         else:
             verdict = "Accepted"

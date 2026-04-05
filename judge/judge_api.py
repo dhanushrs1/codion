@@ -46,7 +46,11 @@ def create_submission(payload: CodeSubmission) -> dict:
         "job_id": job_id,
         "source_code": payload.source_code,
         "language_id": payload.language_id,
-        "expected_output": payload.expected_output,
+        # Evaluation fields — all optional
+        "stdin": payload.stdin,
+        "expected_output": payload.expected_output,           # legacy
+        "expected_outputs": payload.expected_outputs or [],   # new multi-value
+        "match_mode": payload.match_mode or "normalize",
     })
     _redis.lpush(QUEUE_KEY, job_payload)
 

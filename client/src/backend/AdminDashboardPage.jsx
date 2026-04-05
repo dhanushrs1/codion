@@ -12,7 +12,6 @@ import {
   Layers,
   BookOpen,
   Map,
-  Puzzle
 } from "lucide-react";
 import { APP_ROUTES } from "../routes/paths.js";
 import { apiUrl } from "../shared/api.js";
@@ -20,7 +19,6 @@ import UserManagement from "./users/UserManagement.jsx";
 import TrackManagement from "./curriculum/TrackManagement.jsx";
 import SectionManagement from "./curriculum/SectionManagement.jsx";
 import ExerciseManagement from "./curriculum/ExerciseManagement.jsx";
-import TaskManagement from "./curriculum/TaskManagement.jsx";
 import "./AdminDashboardPage.css";
 
 // ── Sidebar items ──────────────────────────────────────────────────────────
@@ -30,7 +28,6 @@ const NAV_ITEMS = [
   { key: "tracks", label: "Tracks", icon: Map },
   { key: "sections", label: "Sections", icon: Layers },
   { key: "exercises", label: "Exercises", icon: BookOpen },
-  { key: "tasks", label: "Tasks", icon: Puzzle },
   { key: "users", label: "User Management", icon: Users },
 ];
 
@@ -221,7 +218,6 @@ export default function AdminDashboardPage() {
   // Cross-tab navigation state
   const [drilldownTrackId, setDrilldownTrackId] = useState(null);
   const [drilldownSectionId, setDrilldownSectionId] = useState(null);
-  const [drilldownExerciseId, setDrilldownExerciseId] = useState(null);
 
   const handleSelectTrack = (trackId) => {
     setDrilldownTrackId(trackId);
@@ -231,11 +227,6 @@ export default function AdminDashboardPage() {
   const handleSelectSection = (sectionId) => {
     setDrilldownSectionId(sectionId);
     setActiveKey("exercises");
-  };
-
-  const handleSelectExercise = (exerciseId) => {
-    setDrilldownExerciseId(exerciseId);
-    setActiveKey("tasks");
   };
 
   const clearSessionAndRedirect = useCallback(() => {
@@ -354,8 +345,7 @@ export default function AdminDashboardPage() {
           {activeKey === "overview" && <OverviewPage />}
           {activeKey === "tracks" && <TrackManagement onSelectTrack={handleSelectTrack} />}
           {activeKey === "sections" && <SectionManagement initialTrackId={drilldownTrackId} onSelectSection={handleSelectSection} />}
-          {activeKey === "exercises" && <ExerciseManagement initialSectionId={drilldownSectionId} onSelectExercise={handleSelectExercise} />}
-          {activeKey === "tasks" && <TaskManagement initialExerciseId={drilldownExerciseId} />}
+          {activeKey === "exercises" && <ExerciseManagement initialSectionId={drilldownSectionId} />}
           {activeKey === "users" && (
             <UserManagement
               role={role}
