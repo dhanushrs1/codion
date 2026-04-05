@@ -7,12 +7,14 @@ import {
   PenTool, 
   Loader2,
   X,
-  MoreVertical,
   History,
   Ban,
+  ShieldOff,
   ShieldCheck,
   MonitorSmartphone,
-  Globe2
+  Globe2,
+  GraduationCap,
+  Lock
 } from "lucide-react";
 import { apiUrl } from "../../shared/api.js";
 import "./UserManagement.css";
@@ -248,11 +250,8 @@ export default function UserManagement({
   const [banModalUser, setBanModalUser] = useState(null);
   const [roleModalUser, setRoleModalUser] = useState(null);
   const [activityModalUser, setActivityModalUser] = useState(null);
-  const [dropdownOpenId, setDropdownOpenId] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
   const [pendingChanges, setPendingChanges] = useState({});
-
-  const closeDropdown = () => setDropdownOpenId(null);
 
   const clearPendingForUser = (userId) => {
     setPendingChanges((prev) => {
@@ -360,16 +359,6 @@ export default function UserManagement({
   useEffect(() => {
     fetchUsers();
   }, [canViewUsers]);
-
-  useEffect(() => {
-    const handleDocumentClick = (e) => {
-      if (dropdownOpenId !== null && !e.target.closest('.um-actions-wrapper')) {
-        setDropdownOpenId(null);
-      }
-    };
-    document.addEventListener("mousedown", handleDocumentClick);
-    return () => document.removeEventListener("mousedown", handleDocumentClick);
-  }, [dropdownOpenId]);
 
   const handleSaveAllChanges = async (e) => {
     if (e) e.preventDefault();
@@ -494,11 +483,11 @@ export default function UserManagement({
     });
   }, [users, search, roleFilter, pendingChanges]);
 
-  const getRoleIcon = (role) => {
+  const getRoleIcon = (role, size = 14) => {
     const normalized = normalizeRole(role);
-    if (normalized === "admin") return <Shield size={14} />;
-    if (normalized === "editor") return <PenTool size={14} />;
-    return <UserIcon size={14} />;
+    if (normalized === "admin") return <Shield size={size} />;
+    if (normalized === "editor") return <PenTool size={size} />;
+    return <GraduationCap size={size} />;
   };
 
   const getStatusMeta = (effectiveIsActive, hasPending) => {
@@ -664,9 +653,13 @@ export default function UserManagement({
                     </td>
 
                     <td>
-                      <div className={`um-role-badge um-role-badge--${effectiveRole}`}>
-                        {getRoleIcon(effectiveRole)}
-                        {effectiveRole}
+                      <div className="um-role-icon-wrapper">
+                        <div className={`um-role-icon um-role-icon--${effectiveRole}`}>
+                          {getRoleIcon(effectiveRole, 15)}
+                        </div>
+                        <span className="um-role-tooltip">
+                          {effectiveRole.charAt(0).toUpperCase() + effectiveRole.slice(1)}
+                        </span>
                       </div>
                     </td>
 
@@ -691,55 +684,57 @@ export default function UserManagement({
                     </td>
 
                     <td>
-                      {canManageUsers && !isMe ? (
-                        <div className="um-actions-wrapper">
-                          <button 
-                            className={`um-action-kebab ${dropdownOpenId === user.id ? 'um-action-kebab--active' : ''}`}
-                            onClick={() => setDropdownOpenId(dropdownOpenId === user.id ? null : user.id)}
-                            title="Actions"
+                      <div className="um-inline-actions">
+                        {/* View Activity */}
+                        <div className="um-action-btn-wrapper">
+                          <button
+                            className="um-action-btn um-action-btn--neutral"
+                            onClick={() => setActivityModalUser(user)}
+                            disabled={!canManageUsers && !isMe}
+                            aria-label="View Activity"
                           >
-                            <MoreVertical size={16} />
+                            <History size={14} />
                           </button>
-                          
-                          {dropdownOpenId === user.id && (
-                            <div className="um-dropdown">
-                              <button 
-                                className="um-dropdown-item"
-                                onClick={() => {
-                                  closeDropdown();
-                                  setActivityModalUser(user);
-                                }}
-                              >
-                                <History size={14} /> View Activity
-                              </button>
-                              <button 
-                                className="um-dropdown-item"
-                                onClick={() => {
-                                  closeDropdown();
-                                  setRoleModalUser({ ...user, role: effectiveRole });
-                                }}
-                              >
-                                <ShieldCheck size={14} /> Change Role
-                              </button>
-                              <button 
-                                className="um-dropdown-item um-dropdown-item--danger"
-                                onClick={() => {
-                                  closeDropdown();
-                                  if (effectiveIsActive) {
-                                    setBanModalUser({ ...user, is_active: effectiveIsActive });
-                                  } else {
-                                    stageStatusChange(user.id, true, null);
-                                  }
-                                }}
-                              >
-                                <Ban size={14} /> {effectiveIsActive ? "Ban User" : "Unban User"}
-                              </button>
-                            </div>
-                          )}
+                          <span className="um-action-tooltip">View Activity</span>
                         </div>
-                      ) : (
-                        <span className="um-provider">Read only</span>
-                      )}
+
+                        {/* Change Role */}
+                        <div className="um-action-btn-wrapper">
+                          <button
+                            className="um-action-btn um-action-btn--accent"
+                            onClick={() => canManageUsers && !isMe && setRoleModalUser({ ...user, role: effectiveRole })}
+                            disabled={!canManageUsers || isMe}
+                            aria-label="Change Role"
+                          >
+                            <ShieldCheck size={14} />
+                          </button>
+                          <span className="um-action-tooltip">
+                            {isMe ? "Cannot change your own role" : "Change Role"}
+                          </span>
+                        </div>
+
+                        {/* Ban / Unban */}
+                        <div className="um-action-btn-wrapper">
+                          <button
+                            className={`um-action-btn ${effectiveIsActive ? 'um-action-btn--danger' : 'um-action-btn--success'}`}
+                            onClick={() => {
+                              if (!canManageUsers || isMe) return;
+                              if (effectiveIsActive) {
+                                setBanModalUser({ ...user, is_active: effectiveIsActive });
+                              } else {
+                                stageStatusChange(user.id, true, null);
+                              }
+                            }}
+                            disabled={!canManageUsers || isMe}
+                            aria-label={effectiveIsActive ? "Ban User" : "Unban User"}
+                          >
+                            {effectiveIsActive ? <Ban size={14} /> : <ShieldOff size={14} />}
+                          </button>
+                          <span className="um-action-tooltip">
+                            {isMe ? "Cannot ban yourself" : effectiveIsActive ? "Ban User" : "Unban User"}
+                          </span>
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 );
