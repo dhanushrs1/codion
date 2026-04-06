@@ -64,12 +64,14 @@ export async function uploadTrackFeaturedImage(file) {
 // Sections
 export const getSections = (trackId) => request(`/api/admin/tracks/${trackId}/sections`);
 export const createSection = (trackId, data) => request(`/api/admin/tracks/${trackId}/sections`, { method: "POST", body: JSON.stringify(data) });
+export const updateSection = (sectionId, data) => request(`/api/admin/sections/${sectionId}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteSection = (id) => request(`/api/admin/sections/${id}`, { method: "DELETE" });
 export const reorderSections = (item_ids) => request("/api/admin/sections/reorder", { method: "PUT", body: JSON.stringify({ item_ids }) });
 
 // Exercises
 export const getExercises = (sectionId) => request(`/api/admin/sections/${sectionId}/exercises`);
 export const createExercise = (sectionId, data) => request(`/api/admin/sections/${sectionId}/exercises`, { method: "POST", body: JSON.stringify(data) });
+export const updateExercise = (exerciseId, data) => request(`/api/admin/exercises/${exerciseId}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteExercise = (id) => request(`/api/admin/exercises/${id}`, { method: "DELETE" });
 export const reorderExercises = (item_ids) => request("/api/admin/exercises/reorder", { method: "PUT", body: JSON.stringify({ item_ids }) });
 

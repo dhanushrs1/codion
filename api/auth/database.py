@@ -20,48 +20,42 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 async def init_db() -> None:
     """Create all tables on startup if they don't already exist."""
+    # Late import to avoid circular dependency:
+    # auth.database -> media.models -> auth.models (fine)
+    # BUT media.router -> auth.database (would deadlock at module load time)
+    # Importing inside the function ensures auth.database is fully initialized first.
+    from media.models import MediaFile as _MediaFile  # noqa: F401 — registers on Base.metadata
+
     async with engine.begin() as conn:
+        # create_all is idempotent — only creates tables that don't already exist.
+        # MediaFile is now registered on Base.metadata via the late import above.
         await conn.run_sync(Base.metadata.create_all)
-        try:
-            # Lightweight startup migration for existing deployments.
-            await conn.execute(
-                text("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 1")
-            )
-        except Exception:
-            # Column already exists or backend does not support this ALTER variant.
-            pass
-            
-        try:
-            # Lightweight startup migration for the new avatar column.
-            await conn.execute(
-                text("ALTER TABLE users ADD COLUMN avatar VARCHAR(512) DEFAULT NULL")
-            )
-        except Exception:
-            pass
 
-        try:
-            # Ensure existing exercise rows get a default mode.
-            await conn.execute(
-                text("ALTER TABLE exercises ADD COLUMN mode VARCHAR(50) NOT NULL DEFAULT 'task'")
-            )
-        except Exception:
-            pass
+        # ── Legacy migrations (safe to re-run; errors are swallowed) ─────────
+        migrations = [
+            # Users table additions
+            "ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE users ADD COLUMN avatar VARCHAR(512) DEFAULT NULL",
+            "ALTER TABLE users ADD COLUMN ban_reason VARCHAR(256) DEFAULT NULL",
+            # Exercises table additions
+            "ALTER TABLE exercises ADD COLUMN mode VARCHAR(50) NOT NULL DEFAULT 'task'",
+            "ALTER TABLE exercises ADD COLUMN theory_content TEXT NULL",
+            # Tracks table additions
+            "ALTER TABLE tracks ADD COLUMN featured_image_url VARCHAR(1024) NULL",
+        ]
+        for migration_sql in migrations:
+            try:
+                await conn.execute(text(migration_sql))
+            except Exception:
+                # Column already exists or table doesn't exist yet — either is safe.
+                pass
 
-        try:
-            # Theory content is optional rich text and can be added lazily.
-            await conn.execute(
-                text("ALTER TABLE exercises ADD COLUMN theory_content TEXT NULL")
-            )
-        except Exception:
-            pass
-
-        try:
-            # Tracks can have a public cover image URL used by the frontend archive cards.
-            await conn.execute(
-                text("ALTER TABLE tracks ADD COLUMN featured_image_url VARCHAR(1024) NULL")
-            )
-        except Exception:
-            pass
+        # ── media_files table ──────────────────────────────────────────────
+        # create_all above already creates the media_files table if it doesn't
+        # exist (SQLAlchemy generates the correct DDL for MySQL/SQLite/etc.).
+        # No additional raw SQL is needed — removing the manual CREATE TABLE
+        # fallback because it used SQLite-only AUTOINCREMENT syntax that breaks
+        # on MySQL (which uses AUTO_INCREMENT handled by SQLAlchemy automatically).
 
 
 async def get_db():  # type: ignore[return]

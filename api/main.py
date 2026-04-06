@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 from auth.database import init_db
 from auth.router import router as auth_router
 from curriculum.router import router as curriculum_router
+from media.router import router as media_router
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -151,3 +152,4 @@ async def judge_health() -> Any:
 app.include_router(router)
 app.include_router(auth_router)
 app.include_router(curriculum_router)
+app.include_router(media_router)

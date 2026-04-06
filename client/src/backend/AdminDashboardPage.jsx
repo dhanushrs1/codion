@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
+  Image,
   LayoutDashboard,
   Users,
   LogOut,
@@ -9,25 +10,21 @@ import {
   ShieldCheck,
   ChevronLeft,
   Menu,
-  Layers,
-  BookOpen,
-  Map,
+  FolderTree,
 } from "lucide-react";
 import { APP_ROUTES } from "../routes/paths.js";
 import { apiUrl } from "../shared/api.js";
 import UserManagement from "./users/UserManagement.jsx";
-import TrackManagement from "./curriculum/TrackManagement.jsx";
-import SectionManagement from "./curriculum/SectionManagement.jsx";
-import ExerciseManagement from "./curriculum/ExerciseManagement.jsx";
+import CurriculumFileManager from "./curriculum/file-manager/CurriculumFileManager.jsx";
+import MediaLibraryPage from "./media/MediaLibraryPage.jsx";
 import "./AdminDashboardPage.css";
 
 // ── Sidebar items ──────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
   { key: "overview", label: "Overview", icon: LayoutDashboard },
-  { key: "tracks", label: "Tracks", icon: Map },
-  { key: "sections", label: "Sections", icon: Layers },
-  { key: "exercises", label: "Exercises", icon: BookOpen },
+  { key: "tracks", label: "Track Manager", icon: FolderTree },
+  { key: "media", label: "Media Library", icon: Image },
   { key: "users", label: "User Management", icon: Users },
 ];
 
@@ -215,18 +212,13 @@ export default function AdminDashboardPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  // Cross-tab navigation state
-  const [drilldownTrackId, setDrilldownTrackId] = useState(null);
-  const [drilldownSectionId, setDrilldownSectionId] = useState(null);
+  const handleMenuSelect = (key) => {
+    setActiveKey(key);
 
-  const handleSelectTrack = (trackId) => {
-    setDrilldownTrackId(trackId);
-    setActiveKey("sections");
-  };
-
-  const handleSelectSection = (sectionId) => {
-    setDrilldownSectionId(sectionId);
-    setActiveKey("exercises");
+    // Expand workspace area when opening the file-manager style track screen.
+    if (key === "tracks") {
+      setIsSidebarOpen(false);
+    }
   };
 
   const clearSessionAndRedirect = useCallback(() => {
@@ -325,7 +317,7 @@ export default function AdminDashboardPage() {
     <main className={`ap-root ${isSidebarOpen ? "sidebar-open" : "sidebar-closed"}`}>
       <AdminSidebar
         activeKey={activeKey}
-        onSelect={setActiveKey}
+        onSelect={handleMenuSelect}
         isOpen={isSidebarOpen}
         onToggle={() => setIsSidebarOpen((prev) => !prev)}
         onLogout={handleLogout}
@@ -343,9 +335,8 @@ export default function AdminDashboardPage() {
 
         <div className="ap-body">
           {activeKey === "overview" && <OverviewPage />}
-          {activeKey === "tracks" && <TrackManagement onSelectTrack={handleSelectTrack} />}
-          {activeKey === "sections" && <SectionManagement initialTrackId={drilldownTrackId} onSelectSection={handleSelectSection} />}
-          {activeKey === "exercises" && <ExerciseManagement initialSectionId={drilldownSectionId} />}
+          {activeKey === "tracks" && <CurriculumFileManager onExpandWorkspace={() => setIsSidebarOpen(false)} />}
+          {activeKey === "media" && <MediaLibraryPage />}
           {activeKey === "users" && (
             <UserManagement
               role={role}

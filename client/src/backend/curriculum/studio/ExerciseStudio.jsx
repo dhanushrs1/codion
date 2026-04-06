@@ -34,8 +34,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import Editor from "@monaco-editor/react";
-import { getTasks, bulkSaveTasks, deleteTask } from "../../shared/curriculumApi.js";
-import { apiUrl } from "../../shared/api.js";
+import { getTasks, bulkSaveTasks, deleteTask } from "../../../shared/curriculumApi.js";
+import { apiUrl } from "../../../shared/api.js";
 import "./ExerciseStudio.css";
 
 //      Helpers                                                                   

@@ -22,11 +22,12 @@ ELEVATED_ROLES = {"ADMIN", "EDITOR"}
 MAX_TRACK_FEATURED_IMAGE_BYTES = 5 * 1024 * 1024
 ALLOWED_TRACK_IMAGE_CONTENT_TYPES = {
     "image/jpeg",
+    "image/jpg",
     "image/png",
     "image/webp",
     "image/gif",
 }
-ALLOWED_TRACK_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+ALLOWED_TRACK_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".jfif"}
 UPLOADS_PUBLIC_ROOT = Path(__file__).resolve().parents[1] / "uploads" / "public"
 
 
@@ -306,18 +307,13 @@ async def upload_track_featured_image(
     file: UploadFile = File(...),
     _admin: User = Depends(get_current_admin),
 ) -> dict[str, str | int]:
+    suffix = Path(file.filename or "").suffix.lower()
     content_type = (file.content_type or "").lower()
-    if content_type not in ALLOWED_TRACK_IMAGE_CONTENT_TYPES:
+
+    if content_type not in ALLOWED_TRACK_IMAGE_CONTENT_TYPES and suffix not in ALLOWED_TRACK_IMAGE_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only jpg, png, webp, and gif images are allowed.",
-        )
-
-    suffix = Path(file.filename or "").suffix.lower()
-    if suffix not in ALLOWED_TRACK_IMAGE_EXTENSIONS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unsupported image extension.",
         )
 
     blob = await file.read()
