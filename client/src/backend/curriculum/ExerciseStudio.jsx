@@ -286,7 +286,7 @@ function WorkspaceTab({ files, onChange }) {
             language={getLanguage(currentFile?.filename ?? "main.py")}
             value={currentFile?.content ?? ""}
             onChange={(val) => updateFileContent(val ?? "")}
-            theme="vs"
+            theme="vs-dark"
             options={{
               fontSize: 13,
               fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
@@ -414,14 +414,27 @@ function RunCodeModal({ testCases, onApply, onClose }) {
                 <option value={60}>Go</option>
               </select>
             </div>
-            <textarea
-              className="rcm-code-editor"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder={"# Paste your solution code here\nprint('Hello, World!')"}
-              spellCheck={false}
-              autoFocus
-            />
+            <div className="rcm-editor-wrapper" style={{ height: "300px", borderRadius: "8px", overflow: "hidden", border: "1px solid #3f3f46" }}>
+              <Editor
+                height="100%"
+                language={
+                  langId === 71 ? "python" :
+                  langId === 63 ? "javascript" :
+                  langId === 74 ? "typescript" :
+                  langId === 62 ? "java" :
+                  langId === 54 || langId === 50 ? "cpp" :
+                  langId === 60 ? "go" : "plaintext"
+                }
+                theme="vs-dark"
+                value={code}
+                onChange={(value) => setCode(value || "")}
+                options={{
+                  minimap: { enabled: false },
+                  scrollBeyondLastLine: false,
+                  fontSize: 14,
+                }}
+              />
+            </div>
           </div>
 
           {/* Test case results */}
@@ -444,10 +457,9 @@ function RunCodeModal({ testCases, onApply, onClose }) {
                       </div>
                       {r && (
                         <div className="rcm-case-output">
-                          {r.error
-                            ? <span className="rcm-output-err">{r.error}</span>
-                            : <code className="rcm-output-code">{r.output || "(no output)"}</code>
-                          }
+                          {r.output && <div className="rcm-output-code" style={{ whiteSpace: "pre-wrap", marginBottom: r.error ? "8px" : "0" }}>{r.output}</div>}
+                          {r.error && <div className="rcm-output-err" style={{ whiteSpace: "pre-wrap" }}>{r.error}</div>}
+                          {!r.output && !r.error && <div className="rcm-output-code" style={{ opacity: 0.5 }}>(no output)</div>}
                         </div>
                       )}
                       {!r && running && <div className="rcm-case-pending">Running €¦</div>}

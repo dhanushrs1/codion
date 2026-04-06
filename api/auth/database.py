@@ -39,6 +39,22 @@ async def init_db() -> None:
         except Exception:
             pass
 
+        try:
+            # Ensure existing exercise rows get a default mode.
+            await conn.execute(
+                text("ALTER TABLE exercises ADD COLUMN mode VARCHAR(50) NOT NULL DEFAULT 'task'")
+            )
+        except Exception:
+            pass
+
+        try:
+            # Theory content is optional rich text and can be added lazily.
+            await conn.execute(
+                text("ALTER TABLE exercises ADD COLUMN theory_content TEXT NULL")
+            )
+        except Exception:
+            pass
+
 
 async def get_db():  # type: ignore[return]
     async with AsyncSessionLocal() as session:

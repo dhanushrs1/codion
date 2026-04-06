@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, JSON, Boolean
 from sqlalchemy.orm import relationship
 from auth.models import Base
 
@@ -31,9 +31,34 @@ class Exercise(Base):
     section_id = Column(Integer, ForeignKey("sections.id"), nullable=False)
     title = Column(String(256), nullable=False)
     order = Column(Integer, nullable=False)
+    mode = Column(String(50), default="task", nullable=False)
+    theory_content = Column(Text, nullable=True)
     
     section = relationship("Section", back_populates="exercises")
     tasks = relationship("Task", back_populates="exercise", cascade="all, delete-orphan")
+    quiz_questions = relationship("QuizQuestion", back_populates="exercise", cascade="all, delete-orphan")
+
+class QuizQuestion(Base):
+    __tablename__ = "quiz_questions"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    exercise_id = Column(Integer, ForeignKey("exercises.id"), nullable=False)
+    question_text = Column(Text, nullable=False)
+    order = Column(Integer, nullable=False)
+    
+    exercise = relationship("Exercise", back_populates="quiz_questions")
+    options = relationship("QuizOption", back_populates="question", cascade="all, delete-orphan")
+
+class QuizOption(Base):
+    __tablename__ = "quiz_options"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    question_id = Column(Integer, ForeignKey("quiz_questions.id"), nullable=False)
+    option_text = Column(Text, nullable=False)
+    is_correct = Column(Boolean, default=False)
+    order = Column(Integer, nullable=False)
+    
+    question = relationship("QuizQuestion", back_populates="options")
 
 class Task(Base):
     __tablename__ = "tasks"
