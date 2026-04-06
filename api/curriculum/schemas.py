@@ -47,6 +47,15 @@ class ExerciseInDB(ExerciseBase):
     order: int
     model_config = ConfigDict(from_attributes=True)
 
+
+class SectionStudentWithExercises(BaseModel):
+    id: int
+    track_id: int
+    order: int
+    title: str
+    exercises: List[ExerciseInDB] = Field(default_factory=list)
+    model_config = ConfigDict(from_attributes=True)
+
 class ExerciseStudent(ExerciseInDB):
     tasks: List[TaskStudent] = Field(default_factory=list)
 
@@ -72,6 +81,7 @@ class SectionInDB(SectionBase):
 class TrackBase(BaseModel):
     title: str
     description: Optional[str] = None
+    featured_image_url: Optional[str] = None
     language_id: int
 
 class TrackCreate(TrackBase):
@@ -80,6 +90,7 @@ class TrackCreate(TrackBase):
 class TrackUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
+    featured_image_url: Optional[str] = None
     language_id: Optional[int] = None
     order: Optional[int] = None
 
@@ -87,6 +98,10 @@ class TrackInDB(TrackBase):
     id: int
     order: int
     model_config = ConfigDict(from_attributes=True)
+
+
+class TrackTree(TrackInDB):
+    sections: List[SectionStudentWithExercises] = Field(default_factory=list)
 
 class TrackStudent(TrackInDB):
     sections: List[SectionInDB] = Field(default_factory=list)

@@ -24,6 +24,7 @@ for _env_path in [_here.parent / ".env", _here / ".env"]:
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from auth.database import init_db
@@ -40,6 +41,12 @@ CORS_ORIGINS = [
 
 # Judge microservice URL — only reachable inside Docker network
 JUDGE_URL = os.getenv("JUDGE_URL", "http://codion-judge:2358")
+UPLOADS_PUBLIC_DIR = _here / "uploads" / "public"
+PRIVATE_ASSETS_DIR = _here / "uploads" / "private_assets"
+
+# Ensure public/private storage roots always exist.
+UPLOADS_PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
+PRIVATE_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ── App lifespan ──────────────────────────────────────────────────────────────
@@ -66,6 +73,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Public file serving root for user-uploaded assets (URLs stored in DB).
+app.mount("/uploads", StaticFiles(directory=str(UPLOADS_PUBLIC_DIR)), name="uploads")
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

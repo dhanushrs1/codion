@@ -18,6 +18,12 @@ import "./Header.css";
 
 const NAV_MENU_ITEMS = [
   {
+    key: "tracks",
+    type: "link",
+    label: "Tracks",
+    path: APP_ROUTES.frontendTracks,
+  },
+  {
     key: "architecture",
     type: "link",
     label: "Architecture",

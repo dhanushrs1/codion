@@ -30,8 +30,36 @@ async function request(endpoint, options = {}) {
 // Tracks
 export const getTracks = () => request("/api/admin/tracks");
 export const createTrack = (data) => request("/api/admin/tracks", { method: "POST", body: JSON.stringify(data) });
+export const updateTrack = (id, data) => request(`/api/admin/tracks/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteTrack = (id) => request(`/api/admin/tracks/${id}`, { method: "DELETE" });
 export const reorderTracks = (item_ids) => request("/api/admin/tracks/reorder", { method: "PUT", body: JSON.stringify({ item_ids }) });
+
+export async function uploadTrackFeaturedImage(file) {
+  const token = localStorage.getItem("codion_token");
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(apiUrl("/api/admin/uploads/track-featured-image"), {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    let message = "Image upload failed";
+    try {
+      const data = await res.json();
+      message = data.detail || message;
+    } catch {
+      // Keep generic message when server payload is not JSON.
+    }
+    throw new Error(message);
+  }
+
+  return res.json();
+}
 
 // Sections
 export const getSections = (trackId) => request(`/api/admin/tracks/${trackId}/sections`);

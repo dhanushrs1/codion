@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import re
+from datetime import datetime
+from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -15,6 +19,15 @@ from curriculum import models, schemas
 router = APIRouter(tags=["curriculum"])
 
 ELEVATED_ROLES = {"ADMIN", "EDITOR"}
+MAX_TRACK_FEATURED_IMAGE_BYTES = 5 * 1024 * 1024
+ALLOWED_TRACK_IMAGE_CONTENT_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+}
+ALLOWED_TRACK_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+UPLOADS_PUBLIC_ROOT = Path(__file__).resolve().parents[1] / "uploads" / "public"
 
 
 def _token_session_version(payload: dict[str, Any]) -> int:
@@ -156,6 +169,18 @@ def _validate_unique_ids(item_ids: list[int]) -> None:
         )
 
 
+def _slugify_stem(value: str) -> str:
+    stem = re.sub(r"[^a-zA-Z0-9]+", "-", value).strip("-").lower()
+    return stem or "track"
+
+
+def _normalize_track_image_url(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
 # ADMIN: TRACKS
 
 @router.get("/api/admin/tracks", response_model=list[schemas.TrackInDB])
@@ -184,6 +209,7 @@ async def create_track(
     item = models.Track(
         title=payload.title,
         description=payload.description,
+        featured_image_url=_normalize_track_image_url(payload.featured_image_url),
         language_id=payload.language_id,
         order=order_value,
     )
@@ -218,6 +244,8 @@ async def update_track(
         item.title = payload.title
     if payload.description is not None:
         item.description = payload.description
+    if payload.featured_image_url is not None:
+        item.featured_image_url = _normalize_track_image_url(payload.featured_image_url)
     if payload.language_id is not None:
         item.language_id = payload.language_id
 
@@ -271,6 +299,52 @@ async def reorder_tracks(
 
     await db.commit()
     return {"message": "Tracks reordered"}
+
+
+@router.post("/api/admin/uploads/track-featured-image")
+async def upload_track_featured_image(
+    file: UploadFile = File(...),
+    _admin: User = Depends(get_current_admin),
+) -> dict[str, str | int]:
+    content_type = (file.content_type or "").lower()
+    if content_type not in ALLOWED_TRACK_IMAGE_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only jpg, png, webp, and gif images are allowed.",
+        )
+
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in ALLOWED_TRACK_IMAGE_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported image extension.",
+        )
+
+    blob = await file.read()
+    await file.close()
+
+    if not blob:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty.")
+
+    if len(blob) > MAX_TRACK_FEATURED_IMAGE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Image size must be 5MB or smaller.",
+        )
+
+    now = datetime.utcnow()
+    year = f"{now.year:04d}"
+    month = f"{now.month:02d}"
+    target_dir = UPLOADS_PUBLIC_ROOT / year / month
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    stem = _slugify_stem(Path(file.filename or "track").stem)
+    filename = f"{stem}-{uuid4().hex[:12]}{suffix}"
+    target_path = target_dir / filename
+    target_path.write_bytes(blob)
+
+    public_url = f"/uploads/{year}/{month}/{filename}"
+    return {"url": public_url, "size": len(blob), "content_type": content_type}
 
 
 # ADMIN: SECTIONS
@@ -737,6 +811,26 @@ async def reorder_tasks(
 
 
 # STUDENT ENDPOINTS
+
+@router.get("/api/tracks", response_model=list[schemas.TrackTree])
+async def list_tracks_student(
+    db: AsyncSession = Depends(get_db),
+) -> list[models.Track]:
+    rows = await db.scalars(
+        select(models.Track)
+        .options(
+            selectinload(models.Track.sections).selectinload(models.Section.exercises)
+        )
+        .order_by(models.Track.order)
+    )
+
+    tracks = list(rows.all())
+    for track in tracks:
+        track.sections.sort(key=lambda section: int(section.order or 0))
+        for section in track.sections:
+            section.exercises.sort(key=lambda exercise: int(exercise.order or 0))
+
+    return tracks
 
 @router.get("/api/tracks/{track_id}", response_model=schemas.TrackStudent)
 async def get_track_student(

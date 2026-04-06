@@ -8,6 +8,7 @@ class Track(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     title = Column(String(256), nullable=False)
     description = Column(Text, nullable=True)
+    featured_image_url = Column(String(1024), nullable=True)
     language_id = Column(Integer, nullable=False)
     order = Column(Integer, nullable=False)
     

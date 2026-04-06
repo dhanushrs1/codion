@@ -55,6 +55,14 @@ async def init_db() -> None:
         except Exception:
             pass
 
+        try:
+            # Tracks can have a public cover image URL used by the frontend archive cards.
+            await conn.execute(
+                text("ALTER TABLE tracks ADD COLUMN featured_image_url VARCHAR(1024) NULL")
+            )
+        except Exception:
+            pass
+
 
 async def get_db():  # type: ignore[return]
     async with AsyncSessionLocal() as session:

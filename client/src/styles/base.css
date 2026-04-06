@@ -22,8 +22,9 @@
   --accent-glow: #F0F9FF;
   
   --bg-base: #FFFFFF;
-  --bg-surface: #F8FAFC; /* Restored off-white depth layer */
-  --bg-hover: #F1F5F9;   /* Restored slightly darker hover layer */
+  --bg-surface: #FFFFFF; /* Keep full-site canvas white per design requirement */
+  --bg-card: #F8FAFC;    /* Card surface to preserve contrast on white pages */
+  --bg-hover: #F4F7FA;   /* Use subtle contrast on components instead of page tint */
 
   --text-primary: #020617;
   --text-secondary: #475569;
@@ -69,7 +70,7 @@ body,
 
 body {
   font-family: var(--font-body);
-  background-color: var(--bg-surface);
+  background-color: var(--bg-base);
   color: var(--text-secondary);
   font-size: var(--text-base);
   line-height: 1.6;

@@ -4,11 +4,15 @@ export const APP_ROUTES = Object.freeze({
 
   // Clean user-facing slugs.
   frontendDashboard: "/dashboard",
+  frontendTracks: "/tracks",
   frontendWorkspace: "/workspace",
+  frontendExerciseWorkspacePattern: "/workspace/:exerciseId",
+  frontendExerciseWorkspace: (exerciseId) => `/workspace/${exerciseId}`,
 
   // Legacy frontend-prefixed slugs kept for redirects.
   frontendRoot: "/frontend",
   frontendDashboardLegacy: "/frontend/dashboard",
+  frontendTracksLegacy: "/frontend/tracks",
   frontendWorkspaceLegacy: "/frontend/workspace",
 
   // Admin routes remain canonical.
