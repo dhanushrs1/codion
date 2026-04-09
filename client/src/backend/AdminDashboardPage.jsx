@@ -214,11 +214,6 @@ export default function AdminDashboardPage() {
 
   const handleMenuSelect = (key) => {
     setActiveKey(key);
-
-    // Expand workspace area when opening the file-manager style track screen.
-    if (key === "tracks") {
-      setIsSidebarOpen(false);
-    }
   };
 
   const clearSessionAndRedirect = useCallback(() => {
@@ -335,7 +330,7 @@ export default function AdminDashboardPage() {
 
         <div className="ap-body">
           {activeKey === "overview" && <OverviewPage />}
-          {activeKey === "tracks" && <CurriculumFileManager />}
+          {activeKey === "tracks" && <CurriculumFileManager onEnterEditor={() => setIsSidebarOpen(false)} />}
           {activeKey === "media" && <MediaLibraryPage />}
           {activeKey === "users" && (
             <UserManagement

@@ -75,7 +75,7 @@ function parseJsonSafe(value) {
   return JSON.parse(value);
 }
 
-export default function CurriculumFileManager() {
+export default function CurriculumFileManager({ onEnterEditor }) {
   const [tracks, setTracks] = useState([]);
   const [sectionsByTrack, setSectionsByTrack] = useState({});
   const [exercisesBySection, setExercisesBySection] = useState({});
@@ -119,6 +119,8 @@ export default function CurriculumFileManager() {
   
   // Level editing tab state
   const [levelTab, setLevelTab] = useState("theory"); // "theory" or "code"
+  
+  const [isCreatingTrack, setIsCreatingTrack] = useState(false);
 
   const trackMap = useMemo(() => {
     return new Map(tracks.map((track) => [track.id, track]));
@@ -323,6 +325,7 @@ export default function CurriculumFileManager() {
         language_id: Number(newTrackLanguageId),
       });
       setNewTrackTitle("");
+      setIsCreatingTrack(false);
       await loadTracks();
     } catch (err) {
       setError(err.message || "Failed to create track.");
@@ -649,6 +652,7 @@ export default function CurriculumFileManager() {
     setSelectedNode({ type: "track", trackId });
     setExpanded((prev) => ({ ...prev, [`track-${trackId}`]: true }));
     void loadSections(trackId);
+    onEnterEditor?.();
   }
 
   function goBackToList() {
@@ -1255,53 +1259,19 @@ export default function CurriculumFileManager() {
         <div className="cfm-topbar">
           <div>
             <h2>Track Manager</h2>
-            <p>Select a track to open the file manager, or create a new one.</p>
+            <p>Manage your curriculum tracks, sections, and levels.</p>
           </div>
-          <button type="button" className="cfm-btn cfm-btn--ghost" onClick={() => void loadTracks()}>
-            <RefreshCw size={14} /> Refresh
+          <button type="button" className="cfm-btn" onClick={() => setIsCreatingTrack(!isCreatingTrack)}>
+            <Plus size={14} /> New Track
           </button>
         </div>
 
         {error && <div className="cfm-error">{error}</div>}
 
-        <div className="cfm-track-list-grid">
-          {tracks.map((track) => {
-            const langLabel = LANGUAGE_OPTIONS.find(l => l.value === track.language_id)?.label || `Language ID: ${track.language_id}`;
-            return (
-              <div key={track.id} className="cfm-track-card">
-                <div className="cfm-track-card__img">
-                  {track.featured_image_url ? (
-                    <img src={track.featured_image_url} alt={track.title} />
-                  ) : (
-                    <div className="cfm-track-card__placeholder">
-                      <ImagePlus size={32} />
-                    </div>
-                  )}
-                </div>
-                <div className="cfm-track-card__content">
-                  <h3>{track.title}</h3>
-                  <span className="cfm-track-card__lang">{langLabel}</span>
-                  <p>{track.description || "No description provided."}</p>
-                </div>
-                <div className="cfm-track-card__actions">
-                  <button className="cfm-btn cfm-btn--ghost" onClick={() => alert("Analytics feature coming soon")}>
-                    Analytics
-                  </button>
-                  <button className="cfm-btn" onClick={() => openTrackEditor(track.id)}>
-                    Edit Track <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Create new track empty block */}
-          <div className="cfm-track-card cfm-track-card--new">
-            <form onSubmit={handleCreateTrack} className="cfm-track-create-form">
-              <div className="cfm-track-card__placeholder cfm-track-card__placeholder--create">
-                <Plus size={32} />
-                <span>Create New Track</span>
-              </div>
+        {isCreatingTrack && (
+          <div className="cfm-track-create-panel">
+            <h3>Create a New Track</h3>
+            <form onSubmit={handleCreateTrack} className="cfm-track-create-inline">
               <div className="cfm-track-create-fields">
                 <input
                   value={newTrackTitle}
@@ -1319,12 +1289,53 @@ export default function CurriculumFileManager() {
                     </option>
                   ))}
                 </select>
-                <button type="submit" className="cfm-btn" disabled={saving}>
-                  {saving ? <Loader2 size={14} className="cfm-spin" /> : "Create Track"}
-                </button>
+                <div className="cfm-track-create-actions">
+                  <button type="submit" className="cfm-btn" disabled={saving}>
+                    {saving ? <Loader2 size={14} className="cfm-spin" /> : "Create Track"}
+                  </button>
+                  <button type="button" className="cfm-btn cfm-btn--ghost" onClick={() => setIsCreatingTrack(false)}>
+                    Cancel
+                  </button>
+                </div>
               </div>
             </form>
           </div>
+        )}
+
+        <div className="cfm-track-list">
+          {tracks.map((track) => {
+            const langLabel = LANGUAGE_OPTIONS.find(l => l.value === track.language_id)?.label || `Language ID: ${track.language_id}`;
+            return (
+              <div key={track.id} className="cfm-track-row">
+                <div className="cfm-track-row__img">
+                  {track.featured_image_url ? (
+                    <img src={track.featured_image_url} alt={track.title} />
+                  ) : (
+                    <div className="cfm-track-row__placeholder">
+                      <ImagePlus size={18} />
+                    </div>
+                  )}
+                </div>
+                <div className="cfm-track-row__content">
+                  <div className="cfm-track-row__header">
+                    <h3>{track.title}</h3>
+                    <span className="cfm-track-row__lang">{langLabel}</span>
+                  </div>
+                  <p className="cfm-track-row__desc">
+                    {track.description || "No description provided."}
+                  </p>
+                </div>
+                <div className="cfm-track-row__actions">
+                  <button className="cfm-btn cfm-btn--ghost" onClick={() => alert("Analytics feature coming soon")}>
+                    Analytics
+                  </button>
+                  <button className="cfm-btn" onClick={() => openTrackEditor(track.id)}>
+                    Edit Track <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -1338,9 +1349,6 @@ export default function CurriculumFileManager() {
           <p>Editing specific track: manage section → exercise → levels.</p>
         </div>
         <div className="cfm-topbar-actions">
-          <button type="button" className="cfm-btn cfm-btn--ghost" onClick={() => void loadTracks()}>
-            <RefreshCw size={14} /> Refresh
-          </button>
           <button type="button" className="cfm-btn" onClick={goBackToList}>
             Back to List
           </button>
