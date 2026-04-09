@@ -335,7 +335,7 @@ export default function AdminDashboardPage() {
 
         <div className="ap-body">
           {activeKey === "overview" && <OverviewPage />}
-          {activeKey === "tracks" && <CurriculumFileManager onExpandWorkspace={() => setIsSidebarOpen(false)} />}
+          {activeKey === "tracks" && <CurriculumFileManager />}
           {activeKey === "media" && <MediaLibraryPage />}
           {activeKey === "users" && (
             <UserManagement

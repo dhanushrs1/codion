@@ -75,7 +75,7 @@ function parseJsonSafe(value) {
   return JSON.parse(value);
 }
 
-export default function CurriculumFileManager({ onExpandWorkspace }) {
+export default function CurriculumFileManager() {
   const [tracks, setTracks] = useState([]);
   const [sectionsByTrack, setSectionsByTrack] = useState({});
   const [exercisesBySection, setExercisesBySection] = useState({});
@@ -145,10 +145,6 @@ export default function CurriculumFileManager({ onExpandWorkspace }) {
   useEffect(() => {
     void loadTracks();
   }, []);
-
-  useEffect(() => {
-    onExpandWorkspace?.();
-  }, [onExpandWorkspace]);
 
   useEffect(() => {
     if (!selectedNode) {
