@@ -17,7 +17,13 @@ async function request(endpoint, options = {}) {
     let message = "An error occurred";
     try {
       const data = await res.json();
-      message = data.detail || message;
+      if (data.detail) {
+        if (Array.isArray(data.detail)) {
+          message = data.detail.map((err) => err.msg).join(", ");
+        } else {
+          message = data.detail;
+        }
+      }
     } catch {}
     throw new Error(message);
   }
@@ -51,7 +57,13 @@ export async function uploadTrackFeaturedImage(file) {
     let message = "Image upload failed";
     try {
       const data = await res.json();
-      message = data.detail || message;
+      if (data.detail) {
+        if (Array.isArray(data.detail)) {
+          message = data.detail.map((err) => err.msg).join(", ");
+        } else {
+          message = data.detail;
+        }
+      }
     } catch {
       // Keep generic message when server payload is not JSON.
     }

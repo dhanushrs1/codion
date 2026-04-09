@@ -36,9 +36,9 @@ import {
   updateSection,
   updateTask,
   updateTrack,
-  uploadTrackFeaturedImage,
 } from "../../../shared/curriculumApi.js";
 import ExerciseStudio from "../studio/ExerciseStudio.jsx";
+import MediaPickerModal from "../../media/components/MediaPickerModal.jsx";
 import "./CurriculumFileManager.css";
 
 const LANGUAGE_OPTIONS = [
@@ -90,7 +90,6 @@ export default function CurriculumFileManager() {
   const [saving, setSaving] = useState(false);
 
   const [newTrackTitle, setNewTrackTitle] = useState("");
-  const [newTrackDescription, setNewTrackDescription] = useState("");
   const [newTrackLanguageId, setNewTrackLanguageId] = useState("71");
 
   const [newSectionTitle, setNewSectionTitle] = useState("");
@@ -109,10 +108,17 @@ export default function CurriculumFileManager() {
   const [taskSolutionCode, setTaskSolutionCode] = useState("");
   const [taskTestCases, setTaskTestCases] = useState("[]");
 
-  const [uploadFile, setUploadFile] = useState(null);
-  const [uploadingImage, setUploadingImage] = useState(false);
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
 
   const [studioExercise, setStudioExercise] = useState(null);
+  
+  // New "list" or "editor" view state
+  const [viewMode, setViewMode] = useState("list");
+  // Holds the ID of the specific track being edited
+  const [activeEditorTrackId, setActiveEditorTrackId] = useState(null);
+  
+  // Level editing tab state
+  const [levelTab, setLevelTab] = useState("theory"); // "theory" or "code"
 
   const trackMap = useMemo(() => {
     return new Map(tracks.map((track) => [track.id, track]));
@@ -172,7 +178,6 @@ export default function CurriculumFileManager() {
       setTrackDescription(track.description || "");
       setTrackLanguageId(String(track.language_id || 71));
       setTrackFeaturedImageUrl(track.featured_image_url || "");
-      setUploadFile(null);
       return;
     }
 
@@ -212,11 +217,8 @@ export default function CurriculumFileManager() {
     try {
       const data = await getTracks();
       setTracks(data || []);
-
-      if ((data || []).length > 0 && !selectedNode) {
-        const firstTrack = data[0];
-        setSelectedNode({ type: "track", trackId: firstTrack.id });
-      }
+      // Intentionally distinct from setting an initial selectedNode, 
+      // instead we stay on the default "list" view initially.
     } catch (err) {
       setError(err.message || "Failed to load tracks.");
     } finally {
@@ -317,11 +319,10 @@ export default function CurriculumFileManager() {
     try {
       await createTrack({
         title: newTrackTitle.trim(),
-        description: newTrackDescription.trim() || null,
+        description: "New Track Description",
         language_id: Number(newTrackLanguageId),
       });
       setNewTrackTitle("");
-      setNewTrackDescription("");
       await loadTracks();
     } catch (err) {
       setError(err.message || "Failed to create track.");
@@ -627,28 +628,33 @@ export default function CurriculumFileManager() {
     }
   }
 
-  async function handleUploadTrackImage() {
-    if (!selectedNode || selectedNode.type !== "track" || !uploadFile) {
-      return;
+  async function handleMediaSelect(item) {
+    if (item && item.url && selectedNode && selectedNode.type === "track") {
+      setTrackFeaturedImageUrl(item.url);
+      try {
+        await updateTrack(selectedNode.trackId, {
+          featured_image_url: item.url,
+        });
+        await loadTracks();
+      } catch (err) {
+        setError(err.message || "Failed to update featured image.");
+      }
     }
+    setShowMediaPicker(false);
+  }
 
-    setUploadingImage(true);
-    setError("");
-    try {
-      const uploaded = await uploadTrackFeaturedImage(uploadFile);
-      const nextUrl = uploaded.url || "";
+  function openTrackEditor(trackId) {
+    setActiveEditorTrackId(trackId);
+    setViewMode("editor");
+    setSelectedNode({ type: "track", trackId });
+    setExpanded((prev) => ({ ...prev, [`track-${trackId}`]: true }));
+    void loadSections(trackId);
+  }
 
-      setTrackFeaturedImageUrl(nextUrl);
-      await updateTrack(selectedNode.trackId, {
-        featured_image_url: nextUrl,
-      });
-      await loadTracks();
-      setUploadFile(null);
-    } catch (err) {
-      setError(err.message || "Failed to upload featured image.");
-    } finally {
-      setUploadingImage(false);
-    }
+  function goBackToList() {
+    setViewMode("list");
+    setActiveEditorTrackId(null);
+    setSelectedNode(null);
   }
 
   function renderTree() {
@@ -660,9 +666,13 @@ export default function CurriculumFileManager() {
       return <div className="cfm-tree-empty">No tracks yet. Create your first track.</div>;
     }
 
+    const filteredTracks = activeEditorTrackId
+      ? tracks.filter((t) => t.id === activeEditorTrackId)
+      : tracks;
+
     return (
       <ul className="cfm-tree-list">
-        {tracks.map((track) => {
+        {filteredTracks.map((track) => {
           const trackKey = `track-${track.id}`;
           const sections = sectionsByTrack[track.id] || [];
           const trackOpen = isExpanded(trackKey);
@@ -841,12 +851,6 @@ export default function CurriculumFileManager() {
         <div className="cfm-editor-header">
           <h3>Track Settings</h3>
           <div className="cfm-editor-actions">
-            <button type="button" className="cfm-btn cfm-btn--ghost" onClick={() => void handleTrackMove(track.id, -1)}>
-              <GripVertical size={14} /> Move Up
-            </button>
-            <button type="button" className="cfm-btn cfm-btn--ghost" onClick={() => void handleTrackMove(track.id, 1)}>
-              <GripVertical size={14} /> Move Down
-            </button>
             <button type="button" className="cfm-btn cfm-btn--danger" onClick={() => void handleDeleteTrack(track.id)}>
               <Trash2 size={14} /> Delete Track
             </button>
@@ -879,15 +883,6 @@ export default function CurriculumFileManager() {
               placeholder="Track description"
             />
           </label>
-
-          <label className="cfm-field-full">
-            <span>Featured Image URL</span>
-            <input
-              value={trackFeaturedImageUrl}
-              onChange={(event) => setTrackFeaturedImageUrl(event.target.value)}
-              placeholder="/uploads/YYYY/MM/your-image.jpg"
-            />
-          </label>
         </div>
 
         <div className="cfm-image-upload-box">
@@ -895,21 +890,14 @@ export default function CurriculumFileManager() {
             <ImagePlus size={16} />
             <strong>Featured Image</strong>
           </div>
-          <p>Upload a new image to the public uploads library, then it will be linked to this track.</p>
+          <p>Select an image from the Media Library or upload a new one to link it to this track.</p>
           <div className="cfm-image-upload-box__row">
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(event) => setUploadFile(event.target.files?.[0] || null)}
-            />
             <button
               type="button"
               className="cfm-btn"
-              onClick={() => void handleUploadTrackImage()}
-              disabled={!uploadFile || uploadingImage}
+              onClick={() => setShowMediaPicker(true)}
             >
-              {uploadingImage ? <Loader2 size={14} className="cfm-spin" /> : <Upload size={14} />}
-              {uploadingImage ? "Uploading" : "Upload and Attach"}
+              <Upload size={14} /> Select from Media Library
             </button>
           </div>
           {trackFeaturedImageUrl && (
@@ -1181,44 +1169,66 @@ export default function CurriculumFileManager() {
           </button>
         </div>
 
-        <div className="cfm-fields-grid">
-          <label className="cfm-field-full">
-            <span>Instructions (Markdown)</span>
-            <textarea
-              rows={5}
-              value={taskInstructions}
-              onChange={(event) => setTaskInstructions(event.target.value)}
-            />
-          </label>
-
-          <label className="cfm-field-full">
-            <span>Starter Code</span>
-            <textarea
-              rows={4}
-              value={taskStarterCode}
-              onChange={(event) => setTaskStarterCode(event.target.value)}
-            />
-          </label>
-
-          <label className="cfm-field-full">
-            <span>Solution Code</span>
-            <textarea
-              rows={4}
-              value={taskSolutionCode}
-              onChange={(event) => setTaskSolutionCode(event.target.value)}
-            />
-          </label>
-
-          <label className="cfm-field-full">
-            <span>Test Cases (JSON array)</span>
-            <textarea
-              rows={6}
-              className="cfm-code-area"
-              value={taskTestCases}
-              onChange={(event) => setTaskTestCases(event.target.value)}
-            />
-          </label>
+        <div className="cfm-tabs">
+          <button
+            className={`cfm-tab ${levelTab === "theory" ? "cfm-tab--active" : ""}`}
+            onClick={() => setLevelTab("theory")}
+          >
+            Theory
+          </button>
+          <button
+            className={`cfm-tab ${levelTab === "code" ? "cfm-tab--active" : ""}`}
+            onClick={() => setLevelTab("code")}
+          >
+            Code Editor
+          </button>
         </div>
+
+        {levelTab === "theory" && (
+          <div className="cfm-fields-grid">
+            <label className="cfm-field-full">
+              <span>Instructions (Markdown)</span>
+              <textarea
+                rows={12}
+                value={taskInstructions}
+                onChange={(event) => setTaskInstructions(event.target.value)}
+                placeholder="Advanced text editor content here..."
+              />
+            </label>
+          </div>
+        )}
+
+        {levelTab === "code" && (
+          <div className="cfm-fields-grid">
+            <label className="cfm-field-full">
+              <span>Starter Code</span>
+              <textarea
+                rows={4}
+                value={taskStarterCode}
+                onChange={(event) => setTaskStarterCode(event.target.value)}
+              />
+            </label>
+
+            <label className="cfm-field-full">
+              <span>Solution Code</span>
+              <textarea
+                rows={4}
+                value={taskSolutionCode}
+                onChange={(event) => setTaskSolutionCode(event.target.value)}
+              />
+            </label>
+
+            <label className="cfm-field-full">
+              <span>Test Cases (JSON array)</span>
+              <textarea
+                rows={6}
+                className="cfm-code-area"
+                value={taskTestCases}
+                onChange={(event) => setTaskTestCases(event.target.value)}
+              />
+            </label>
+          </div>
+        )}
 
         <div className="cfm-editor-footer">
           <button type="button" className="cfm-btn" onClick={() => void handleSaveTask()}>
@@ -1239,51 +1249,108 @@ export default function CurriculumFileManager() {
     );
   }
 
+  if (viewMode === "list") {
+    return (
+      <div className="cfm-root">
+        <div className="cfm-topbar">
+          <div>
+            <h2>Track Manager</h2>
+            <p>Select a track to open the file manager, or create a new one.</p>
+          </div>
+          <button type="button" className="cfm-btn cfm-btn--ghost" onClick={() => void loadTracks()}>
+            <RefreshCw size={14} /> Refresh
+          </button>
+        </div>
+
+        {error && <div className="cfm-error">{error}</div>}
+
+        <div className="cfm-track-list-grid">
+          {tracks.map((track) => {
+            const langLabel = LANGUAGE_OPTIONS.find(l => l.value === track.language_id)?.label || `Language ID: ${track.language_id}`;
+            return (
+              <div key={track.id} className="cfm-track-card">
+                <div className="cfm-track-card__img">
+                  {track.featured_image_url ? (
+                    <img src={track.featured_image_url} alt={track.title} />
+                  ) : (
+                    <div className="cfm-track-card__placeholder">
+                      <ImagePlus size={32} />
+                    </div>
+                  )}
+                </div>
+                <div className="cfm-track-card__content">
+                  <h3>{track.title}</h3>
+                  <span className="cfm-track-card__lang">{langLabel}</span>
+                  <p>{track.description || "No description provided."}</p>
+                </div>
+                <div className="cfm-track-card__actions">
+                  <button className="cfm-btn cfm-btn--ghost" onClick={() => alert("Analytics feature coming soon")}>
+                    Analytics
+                  </button>
+                  <button className="cfm-btn" onClick={() => openTrackEditor(track.id)}>
+                    Edit Track <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Create new track empty block */}
+          <div className="cfm-track-card cfm-track-card--new">
+            <form onSubmit={handleCreateTrack} className="cfm-track-create-form">
+              <div className="cfm-track-card__placeholder cfm-track-card__placeholder--create">
+                <Plus size={32} />
+                <span>Create New Track</span>
+              </div>
+              <div className="cfm-track-create-fields">
+                <input
+                  value={newTrackTitle}
+                  onChange={(event) => setNewTrackTitle(event.target.value)}
+                  placeholder="Track title"
+                  required
+                />
+                <select
+                  value={newTrackLanguageId}
+                  onChange={(event) => setNewTrackLanguageId(event.target.value)}
+                >
+                  {LANGUAGE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" className="cfm-btn" disabled={saving}>
+                  {saving ? <Loader2 size={14} className="cfm-spin" /> : "Create Track"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="cfm-root">
+    <div className="cfm-root cfm-editor-mode">
       <div className="cfm-topbar">
         <div>
-          <h2>Curriculum File Manager</h2>
-          <p>Manage everything from one explorer: track → section → exercise → levels.</p>
+          <h2>Track File Manager</h2>
+          <p>Editing specific track: manage section → exercise → levels.</p>
         </div>
-        <button type="button" className="cfm-btn cfm-btn--ghost" onClick={() => void loadTracks()}>
-          <RefreshCw size={14} /> Refresh
-        </button>
+        <div className="cfm-topbar-actions">
+          <button type="button" className="cfm-btn cfm-btn--ghost" onClick={() => void loadTracks()}>
+            <RefreshCw size={14} /> Refresh
+          </button>
+          <button type="button" className="cfm-btn" onClick={goBackToList}>
+            Back to List
+          </button>
+        </div>
       </div>
 
       {error && <div className="cfm-error">{error}</div>}
 
       <div className="cfm-layout">
         <aside className="cfm-tree-panel">
-          <form className="cfm-create-track" onSubmit={handleCreateTrack}>
-            <h3>Create Track</h3>
-            <input
-              value={newTrackTitle}
-              onChange={(event) => setNewTrackTitle(event.target.value)}
-              placeholder="Track title"
-              required
-            />
-            <textarea
-              rows={2}
-              value={newTrackDescription}
-              onChange={(event) => setNewTrackDescription(event.target.value)}
-              placeholder="Track description"
-            />
-            <select
-              value={newTrackLanguageId}
-              onChange={(event) => setNewTrackLanguageId(event.target.value)}
-            >
-              {LANGUAGE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <button type="submit" className="cfm-btn" disabled={saving}>
-              {saving ? <Loader2 size={14} className="cfm-spin" /> : <Plus size={14} />} Add Track
-            </button>
-          </form>
-
           <div className="cfm-tree-wrapper">{renderTree()}</div>
         </aside>
 
@@ -1300,6 +1367,12 @@ export default function CurriculumFileManager() {
           {renderTaskPanel()}
         </section>
       </div>
+
+      <MediaPickerModal
+        isOpen={showMediaPicker}
+        onClose={() => setShowMediaPicker(false)}
+        onSelect={handleMediaSelect}
+      />
     </div>
   );
 }
