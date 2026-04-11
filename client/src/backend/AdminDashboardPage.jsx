@@ -4,6 +4,7 @@ import {
   Image,
   LayoutDashboard,
   Users,
+  User,
   LogOut,
   Globe,
   ChevronRight,
@@ -18,6 +19,7 @@ import { apiUrl } from "../shared/api.js";
 import UserManagement from "./users/UserManagement.jsx";
 import TrackManagerPage from "./curriculum/file-manager/TrackManagerPage.jsx";
 import MediaLibraryPage from "./media/MediaLibraryPage.jsx";
+import AdminAccountPage from "./account/AdminAccountPage.jsx";
 import AdminSettingsPage from "./settings/AdminSettingsPage.jsx";
 import "./AdminDashboardPage.css";
 
@@ -28,6 +30,7 @@ const NAV_ITEMS = [
   { key: "tracks", label: "Track Manager", icon: FolderTree },
   { key: "media", label: "Media Library", icon: Image },
   { key: "users", label: "User Management", icon: Users },
+  { key: "account", label: "My Account", icon: User },
   { key: "settings", label: "Settings", icon: Settings2 },
 ];
 
@@ -280,6 +283,36 @@ export default function AdminDashboardPage() {
     clearSessionAndRedirect();
   }, [clearSessionAndRedirect]);
 
+  const handleProfileUpdated = useCallback((nextProfile) => {
+    if (!nextProfile || typeof nextProfile !== "object") {
+      return;
+    }
+
+    const nextUsername = String(nextProfile.username || "").trim();
+    const nextRole = String(nextProfile.role || "").trim().toUpperCase();
+    const hasAvatarKey = Object.prototype.hasOwnProperty.call(nextProfile, "avatar");
+
+    if (nextUsername) {
+      setUsername(nextUsername);
+      localStorage.setItem("codion_username", nextUsername);
+    }
+
+    if (nextRole) {
+      setRole(nextRole);
+      localStorage.setItem("codion_role", nextRole);
+    }
+
+    if (hasAvatarKey) {
+      const nextAvatar = String(nextProfile.avatar || "").trim();
+      setAvatarUrl(nextAvatar);
+      if (nextAvatar) {
+        localStorage.setItem("codion_avatar_url", nextAvatar);
+      } else {
+        localStorage.removeItem("codion_avatar_url");
+      }
+    }
+  }, []);
+
   useEffect(() => {
     setRole((localStorage.getItem("codion_role") || "USER").toUpperCase());
     setUsername(localStorage.getItem("codion_username") || "guest");
@@ -387,6 +420,12 @@ export default function AdminDashboardPage() {
               role={role}
               username={username}
               onSessionExpired={handleSessionExpired}
+            />
+          )}
+          {activeKey === "account" && (
+            <AdminAccountPage
+              onSessionExpired={handleSessionExpired}
+              onProfileUpdated={handleProfileUpdated}
             />
           )}
           {activeKey === "settings" && <AdminSettingsPage />}

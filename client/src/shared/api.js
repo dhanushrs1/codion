@@ -64,7 +64,7 @@ export async function logAdminActivity(payload) {
 /**
  * Retrieve the latest admin/editor audit logs for dashboard rendering.
  */
-export async function fetchAdminActivityLogs({ limit = 25, offset = 0 } = {}) {
+export async function fetchAdminActivityLogs({ limit = 25, offset = 0, role = "", activityType = "", username = "" } = {}) {
   const token = readAccessToken();
   if (!token) {
     return { items: [], total: 0 };
@@ -74,6 +74,15 @@ export async function fetchAdminActivityLogs({ limit = 25, offset = 0 } = {}) {
     limit: String(limit),
     offset: String(offset),
   });
+  if (role) {
+    params.set("role", role);
+  }
+  if (activityType) {
+    params.set("activity_type", activityType);
+  }
+  if (username) {
+    params.set("username", username);
+  }
 
   const response = await fetch(apiUrl(`/auth/admin-activity?${params.toString()}`), {
     method: "GET",

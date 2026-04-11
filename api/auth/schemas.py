@@ -46,6 +46,41 @@ class AuthenticatedUserResponse(BaseModel):
     avatar: str | None = None
 
 
+class AdminAccountProfileResponse(BaseModel):
+    """Authenticated admin/editor account profile payload."""
+
+    id: int
+    username: str
+    role: str
+    email: str
+    first_name: str
+    last_name: str | None = None
+    auth_provider: str
+    avatar: str | None = None
+    is_active: bool
+    created_at: datetime
+    last_login: datetime | None = None
+    session_version: int
+
+
+class AdminAccountProfileUpdateRequest(BaseModel):
+    """Patch payload for updating current admin/editor profile fields."""
+
+    first_name: str | None = Field(default=None, min_length=1, max_length=128)
+    last_name: str | None = Field(default=None, max_length=128)
+    avatar: str | None = Field(default=None, max_length=512)
+
+    model_config = {"extra": "forbid"}
+
+
+class AdminAccountSessionsRevokeResponse(BaseModel):
+    """Returned after revoking current user's sessions."""
+
+    revoked_sessions: int
+    session_version: int
+    message: str
+
+
 class SetupTokenResponse(BaseModel):
     """Returned for new users who still need to choose a username."""
     setup_token: str

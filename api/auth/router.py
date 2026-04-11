@@ -11,6 +11,10 @@ Endpoints:
   GET  /auth/github/callback
   GET  /auth/check-username
   POST /auth/complete-profile
+    GET  /auth/account/profile
+    PATCH /auth/account/profile
+    GET  /auth/account/sessions
+    POST /auth/account/sessions/revoke-all
   POST /auth/logout
   POST /auth/admin-activity
   GET  /auth/admin-activity
@@ -35,6 +39,9 @@ from auth.jwt_utils import _decode, create_access_token, create_setup_token, ver
 from auth.models import AdminActivityLog, User, UserSession
 from auth.schemas import (
     AccessTokenResponse,
+    AdminAccountProfileResponse,
+    AdminAccountProfileUpdateRequest,
+    AdminAccountSessionsRevokeResponse,
     AuthenticatedUserResponse,
     AdminActivityEventRequest,
     AdminActivityLogItem,
@@ -114,6 +121,23 @@ def _serialize_admin_user(user: User) -> AdminUserResponse:
         created_at=user.created_at or datetime.utcnow(),
         last_login=user.last_login,
         avatar=user.avatar,
+    )
+
+
+def _serialize_account_profile(user: User, normalized_role: str) -> AdminAccountProfileResponse:
+    return AdminAccountProfileResponse(
+        id=int(user.id or 0),
+        username=((user.username or "").strip() or "unknown"),
+        role=(normalized_role or _normalize_role(user.role or "student")),
+        email=((user.email or "").strip() or "unknown@example.com"),
+        first_name=((user.first_name or "").strip() or "Unknown"),
+        last_name=((user.last_name or "").strip() or None),
+        auth_provider=((user.auth_provider or "oauth").strip() or "oauth"),
+        avatar=(user.avatar or None),
+        is_active=bool(user.is_active),
+        created_at=user.created_at or datetime.utcnow(),
+        last_login=user.last_login,
+        session_version=int(user.session_version or 1),
     )
 
 
@@ -612,6 +636,174 @@ async def get_authenticated_user(
         last_name=user.last_name,
         is_active=bool(user.is_active),
         avatar=user.avatar,
+    )
+
+
+@router.get(
+    "/account/profile",
+    response_model=AdminAccountProfileResponse,
+    summary="Get current admin/editor account profile",
+)
+async def get_account_profile(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> AdminAccountProfileResponse:
+    user, normalized_role = await _get_authenticated_user(request, db)
+
+    if not _is_elevated_role(normalized_role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin/editor users can access account profile.",
+        )
+
+    return _serialize_account_profile(user, normalized_role)
+
+
+@router.patch(
+    "/account/profile",
+    response_model=AdminAccountProfileResponse,
+    summary="Update current admin/editor profile fields",
+)
+async def update_account_profile(
+    payload: AdminAccountProfileUpdateRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> AdminAccountProfileResponse:
+    user, normalized_role = await _get_authenticated_user(request, db)
+
+    if not _is_elevated_role(normalized_role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin/editor users can update account profile.",
+        )
+
+    changed_fields: list[str] = []
+
+    if payload.first_name is not None:
+        first_name = payload.first_name.strip()
+        if not first_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="first_name cannot be blank.",
+            )
+        if first_name != (user.first_name or ""):
+            user.first_name = first_name
+            changed_fields.append("first_name")
+
+    if payload.last_name is not None:
+        last_name = payload.last_name.strip() or None
+        if last_name != (user.last_name or None):
+            user.last_name = last_name
+            changed_fields.append("last_name")
+
+    if payload.avatar is not None:
+        avatar = payload.avatar.strip() or None
+        if avatar != (user.avatar or None):
+            user.avatar = avatar
+            changed_fields.append("avatar")
+
+    if not changed_fields:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No profile changes submitted.",
+        )
+
+    await _record_activity(
+        db=db,
+        request=request,
+        user=user,
+        role=normalized_role,
+        activity_type="account_profile_updated",
+        activity_context="my_account_panel",
+        target_path="/auth/account/profile",
+        details={"fields": changed_fields},
+        commit=False,
+    )
+
+    await db.commit()
+    await db.refresh(user)
+
+    return _serialize_account_profile(user, normalized_role)
+
+
+@router.get(
+    "/account/sessions",
+    response_model=list[UserSessionResponse],
+    summary="Get current admin/editor login sessions",
+)
+async def list_account_sessions(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=25, ge=1, le=100),
+) -> list[UserSessionResponse]:
+    user, normalized_role = await _get_authenticated_user(request, db)
+
+    if not _is_elevated_role(normalized_role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin/editor users can view account sessions.",
+        )
+
+    sessions = (
+        await db.scalars(
+            select(UserSession)
+            .where(UserSession.user_id == user.id)
+            .order_by(desc(UserSession.login_time))
+            .limit(limit)
+        )
+    ).all()
+
+    return [UserSessionResponse.model_validate(session) for session in sessions]
+
+
+@router.post(
+    "/account/sessions/revoke-all",
+    response_model=AdminAccountSessionsRevokeResponse,
+    summary="Revoke all current admin/editor sessions",
+)
+async def revoke_account_sessions(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> AdminAccountSessionsRevokeResponse:
+    user, normalized_role = await _get_authenticated_user(request, db)
+
+    if not _is_elevated_role(normalized_role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin/editor users can revoke account sessions.",
+        )
+
+    active_sessions = (
+        await db.scalars(
+            select(UserSession)
+            .where(UserSession.user_id == user.id)
+            .where(UserSession.logout_time.is_(None))
+        )
+    ).all()
+    revoked_count = len(active_sessions)
+
+    await _invalidate_user_sessions(db, user)
+
+    await _record_activity(
+        db=db,
+        request=request,
+        user=user,
+        role=normalized_role,
+        activity_type="account_sessions_revoked",
+        activity_context="my_account_panel",
+        target_path="/auth/account/sessions/revoke-all",
+        details={"revoked_sessions": revoked_count},
+        resolve_geo=True,
+        commit=False,
+    )
+
+    await db.commit()
+    await db.refresh(user)
+
+    return AdminAccountSessionsRevokeResponse(
+        revoked_sessions=revoked_count,
+        session_version=int(user.session_version or 1),
+        message="All active sessions were revoked. Please sign in again.",
     )
 
 
