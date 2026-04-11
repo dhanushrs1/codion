@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import mimetypes
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
@@ -17,6 +16,19 @@ from auth.database import get_db
 from auth.jwt_utils import _decode
 from auth.models import User
 from media.models import MediaFile
+from media.storage_provider import (
+    build_cloud_public_id,
+    build_storage_settings_response,
+    delete_cloudinary_asset,
+    ensure_cloudinary_config_ready,
+    ensure_provider_active,
+    get_or_create_storage_settings,
+    resolve_cloudinary_config,
+    test_cloudinary_connection,
+    touch_storage_settings_test_status,
+    touch_storage_settings_updated,
+    upload_blob_to_cloudinary,
+)
 
 router = APIRouter(tags=["media"])
 
@@ -97,11 +109,18 @@ PREFERRED_SUFFIX_BY_CONTENT_TYPE = {
     "application/zip": ".zip",
 }
 
-PUBLIC_MEDIA_ROOT = Path(__file__).resolve().parents[1] / "uploads" / "public"
-
 
 class DeleteMediaRequest(BaseModel):
     relative_path: str
+
+
+class StorageSettingsUpdateRequest(BaseModel):
+    active_provider: str
+    cloudinary_folder_prefix: str | None = None
+
+
+class StorageSettingsTestRequest(BaseModel):
+    cloudinary_folder_prefix: str | None = None
 
 
 def _token_session_version(payload: dict[str, Any]) -> int:
@@ -156,14 +175,12 @@ def _slugify_stem(value: str) -> str:
     return stem or "media"
 
 
-def _normalize_relative_path(raw_value: str) -> Path:
-    normalized = raw_value.strip().replace("\\", "/")
+def _normalize_cloud_reference(raw_value: str) -> str:
+    normalized = (raw_value or "").strip().replace("\\", "/").strip("/")
     candidate = Path(normalized)
 
     if not normalized:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="relative_path is required.")
-    if candidate.is_absolute() or normalized.startswith("/"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only relative paths are allowed.")
     if ".." in candidate.parts:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Path traversal is not allowed.")
 
@@ -171,17 +188,7 @@ def _normalize_relative_path(raw_value: str) -> Path:
     if not clean_parts:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid relative_path value.")
 
-    return Path(*clean_parts)
-
-
-def _ensure_safe_target(root: Path, relative_path: Path) -> Path:
-    resolved_root = root.resolve()
-    target = (resolved_root / relative_path).resolve()
-    try:
-        target.relative_to(resolved_root)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid path.") from exc
-    return target
+    return "/".join(clean_parts)
 
 
 def _allowed_media(content_type: str, suffix: str) -> bool:
@@ -200,49 +207,66 @@ def _resolve_category(content_type: str, suffix: str) -> str:
     return "file"
 
 
-def _media_item_from_path(path: Path, root: Path) -> dict[str, Any]:
-    rel = path.relative_to(root).as_posix()
-    guessed_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-    suffix = path.suffix.lower()
-    stats = path.stat()
+@router.get("/api/admin/media/storage-settings")
+async def get_media_storage_settings(
+    _admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    settings = await get_or_create_storage_settings(db)
+    return build_storage_settings_response(settings)
+
+
+@router.put("/api/admin/media/storage-settings")
+async def update_media_storage_settings(
+    payload: StorageSettingsUpdateRequest,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    settings = await get_or_create_storage_settings(db)
+
+    ensure_provider_active(payload.active_provider)
+
+    if payload.cloudinary_folder_prefix is not None:
+        settings.cloudinary_folder_prefix = payload.cloudinary_folder_prefix
+
+    config = resolve_cloudinary_config(settings)
+    ensure_cloudinary_config_ready(config)
+    ok, message = test_cloudinary_connection(config)
+    touch_storage_settings_test_status(settings, ok=ok)
+    if not ok:
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+
+    settings.active_provider = "cloudinary"
+    touch_storage_settings_updated(settings, updated_by_id=admin.id)
+
+    await db.commit()
+    await db.refresh(settings)
 
     return {
-        "filename": path.name,
-        "relative_path": rel,
-        "visibility": "public",
-        "size": int(stats.st_size),
-        "content_type": guessed_type,
-        "category": _resolve_category(guessed_type, suffix),
-        "modified_at": datetime.utcfromtimestamp(stats.st_mtime).isoformat() + "Z",
-        "url": f"/uploads/{rel}",
+        "message": "Storage settings updated.",
+        "settings": build_storage_settings_response(settings),
     }
 
 
-def _iter_media_items(root: Path, query: str) -> list[dict[str, Any]]:
-    if not root.exists():
-        return []
+@router.post("/api/admin/media/storage-settings/test")
+async def test_media_storage_settings(
+    payload: StorageSettingsTestRequest,
+    _admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    settings = await get_or_create_storage_settings(db)
+    overrides: dict[str, str] = {}
+    if payload.cloudinary_folder_prefix is not None:
+        overrides["folder_prefix"] = payload.cloudinary_folder_prefix
 
-    lowered = query.lower().strip()
-    items: list[dict[str, Any]] = []
-    for path in root.rglob("*"):
-        if not path.is_file():
-            continue
+    config = resolve_cloudinary_config(settings, overrides=overrides)
 
-        suffix = path.suffix.lower()
-        content_type = (mimetypes.guess_type(path.name)[0] or "").lower()
-        if not _allowed_media(content_type, suffix):
-            continue
+    ok, message = test_cloudinary_connection(config)
+    touch_storage_settings_test_status(settings, ok=ok)
+    await db.commit()
 
-        item = _media_item_from_path(path, root)
-        if lowered:
-            haystack = f"{item['filename']} {item['relative_path']} {item['content_type']} {item['category']}".lower()
-            if lowered not in haystack:
-                continue
-
-        items.append(item)
-
-    items.sort(key=lambda row: str(row["modified_at"]), reverse=True)
-    return items
+    return {"ok": ok, "message": message}
 
 
 @router.get("/api/admin/media")
@@ -273,6 +297,7 @@ async def list_media(
             "content_type": row.mime_type,
             "category": row.category,
             "url": row.url,
+            "storage_provider": row.storage_provider,
             "uploaded_at": row.uploaded_at.isoformat() + "Z",
             "uploaded_by_name": row.uploaded_by.username if row.uploaded_by else "Unknown",
             "uploaded_by_role": row.uploaded_by.role if row.uploaded_by else "Unknown"
@@ -289,12 +314,15 @@ async def upload_media(
     if not files:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No files uploaded.")
 
-    root = PUBLIC_MEDIA_ROOT
+    settings = await get_or_create_storage_settings(db)
+    ensure_provider_active("cloudinary")
+    cloudinary_config = resolve_cloudinary_config(settings)
+    ensure_cloudinary_config_ready(cloudinary_config)
+
+    active_provider = "cloudinary"
     now = datetime.utcnow()
     year = f"{now.year:04d}"
     month = f"{now.month:02d}"
-    target_dir = root / year / month
-    target_dir.mkdir(parents=True, exist_ok=True)
 
     uploaded_items: list[dict[str, Any]] = []
 
@@ -325,12 +353,27 @@ async def upload_media(
             )
 
         stem = _slugify_stem(Path(raw_name).stem)
-        safe_filename = f"{stem}-{uuid4().hex[:12]}{suffix}"
-        target_path = target_dir / safe_filename
-        target_path.write_bytes(blob)
-        
-        rel_path = target_path.relative_to(root).as_posix()
+        stem_with_uuid = f"{stem}-{uuid4().hex[:12]}"
+        safe_filename = f"{stem_with_uuid}{suffix}"
         cat = _resolve_category(content_type, suffix)
+
+        rel_path = ""
+        public_id = build_cloud_public_id(
+            folder_prefix=cloudinary_config.get("folder_prefix") or "codion",
+            year=year,
+            month=month,
+            stem_with_uuid=stem_with_uuid,
+        )
+        result = upload_blob_to_cloudinary(
+            blob,
+            public_id=public_id,
+            content_type=content_type,
+            config=cloudinary_config,
+        )
+        cloud_public_id = str(result.get("public_id") or public_id)
+        cloud_resource_type = str(result.get("resource_type") or "raw")
+        media_url = str(result.get("secure_url") or "")
+        rel_path = cloud_public_id
         
         db_file = MediaFile(
             filename=safe_filename,
@@ -339,7 +382,10 @@ async def upload_media(
             file_size=len(blob),
             mime_type=content_type,
             category=cat,
-            url=f"/uploads/{rel_path}",
+            url=media_url,
+            storage_provider=active_provider,
+            cloud_public_id=cloud_public_id,
+            cloud_resource_type=cloud_resource_type,
             uploaded_by_id=admin.id,
             uploaded_at=now
         )
@@ -352,7 +398,8 @@ async def upload_media(
             "size": len(blob),
             "content_type": content_type,
             "category": cat,
-            "url": f"/uploads/{rel_path}",
+            "url": media_url,
+            "storage_provider": active_provider,
             "uploaded_at": now.isoformat() + "Z",
             "uploaded_by_name": admin.username,
             "uploaded_by_role": admin.role
@@ -368,42 +415,29 @@ async def delete_media(
     _admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    root = PUBLIC_MEDIA_ROOT
-    relative_path = _normalize_relative_path(payload.relative_path)
-    target_path = _ensure_safe_target(root, relative_path)
+    rel_str = _normalize_cloud_reference(payload.relative_path)
 
-    # Check file existence BEFORE modifying anything
-    if not target_path.exists() or not target_path.is_file():
-        # Still clean up the DB record if it's orphaned
-        rel_str = relative_path.as_posix()
-        stmt = select(MediaFile).where(MediaFile.relative_path == rel_str)
-        result = await db.execute(stmt)
-        db_file = result.scalar_one_or_none()
-        if db_file:
-            await db.delete(db_file)
-            await db.commit()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media file not found on disk.")
-
-    # Delete from DB first (so the record isn't orphaned if disk delete fails)
-    rel_str = relative_path.as_posix()
-    stmt = select(MediaFile).where(MediaFile.relative_path == rel_str)
+    stmt = select(MediaFile).where(
+        (MediaFile.relative_path == rel_str) | (MediaFile.cloud_public_id == rel_str)
+    )
     result = await db.execute(stmt)
     db_file = result.scalar_one_or_none()
-    if db_file:
-        await db.delete(db_file)
-        await db.commit()
 
-    # Delete from disk
-    target_path.unlink(missing_ok=True)
+    if not db_file:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media file not found.")
 
-    # Clean up empty parent directories
-    resolved_root = root.resolve()
-    current = target_path.parent
-    while current.resolve() != resolved_root:
-        try:
-            current.rmdir()
-        except OSError:
-            break
-        current = current.parent
+    if db_file.cloud_public_id:
+        settings = await get_or_create_storage_settings(db)
+        cloudinary_config = resolve_cloudinary_config(settings)
+        ensure_cloudinary_config_ready(cloudinary_config)
+
+        delete_cloudinary_asset(
+            db_file.cloud_public_id,
+            config=cloudinary_config,
+            resource_type=db_file.cloud_resource_type,
+        )
+
+    await db.delete(db_file)
+    await db.commit()
 
     return {"message": "Media deleted"}

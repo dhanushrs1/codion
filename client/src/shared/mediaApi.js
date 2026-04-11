@@ -139,3 +139,70 @@ export async function deleteMediaFile({ relativePath }) {
 
   return res.json();
 }
+
+/**
+ * Fetch current admin media storage settings.
+ * @returns {Promise<object>}
+ */
+export async function getMediaStorageSettings() {
+  const res = await fetch(apiUrl("/api/admin/media/storage-settings"), {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeader(),
+    },
+  });
+
+  if (!res.ok) {
+    const msg = await parseErrorResponse(res, `Failed to load storage settings (${res.status}).`);
+    throw new Error(msg);
+  }
+
+  return res.json();
+}
+
+/**
+ * Update non-sensitive admin media storage settings.
+ * @param {object} payload
+ * @returns {Promise<object>}
+ */
+export async function updateMediaStorageSettings(payload) {
+  const res = await fetch(apiUrl("/api/admin/media/storage-settings"), {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeader(),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const msg = await parseErrorResponse(res, `Failed to update storage settings (${res.status}).`);
+    throw new Error(msg);
+  }
+
+  return res.json();
+}
+
+/**
+ * Test Cloudinary connectivity using environment credentials and optional overrides.
+ * @param {object} payload
+ * @returns {Promise<{ok:boolean, message:string}>}
+ */
+export async function testMediaStorageSettings(payload) {
+  const res = await fetch(apiUrl("/api/admin/media/storage-settings/test"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeader(),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const msg = await parseErrorResponse(res, `Storage test failed (${res.status}).`);
+    throw new Error(msg);
+  }
+
+  return res.json();
+}

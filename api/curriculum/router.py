@@ -15,6 +15,13 @@ from auth.database import get_db
 from auth.jwt_utils import _decode
 from auth.models import User
 from curriculum import models, schemas
+from media.storage_provider import (
+    build_cloud_public_id,
+    ensure_cloudinary_config_ready,
+    get_or_create_storage_settings,
+    resolve_cloudinary_config,
+    upload_blob_to_cloudinary,
+)
 
 router = APIRouter(tags=["curriculum"])
 
@@ -28,7 +35,6 @@ ALLOWED_TRACK_IMAGE_CONTENT_TYPES = {
     "image/gif",
 }
 ALLOWED_TRACK_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".jfif"}
-UPLOADS_PUBLIC_ROOT = Path(__file__).resolve().parents[1] / "uploads" / "public"
 
 
 def _token_session_version(payload: dict[str, Any]) -> int:
@@ -306,6 +312,7 @@ async def reorder_tracks(
 async def upload_track_featured_image(
     file: UploadFile = File(...),
     _admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, str | int]:
     suffix = Path(file.filename or "").suffix.lower()
     content_type = (file.content_type or "").lower()
@@ -331,15 +338,31 @@ async def upload_track_featured_image(
     now = datetime.utcnow()
     year = f"{now.year:04d}"
     month = f"{now.month:02d}"
-    target_dir = UPLOADS_PUBLIC_ROOT / year / month
-    target_dir.mkdir(parents=True, exist_ok=True)
-
     stem = _slugify_stem(Path(file.filename or "track").stem)
-    filename = f"{stem}-{uuid4().hex[:12]}{suffix}"
-    target_path = target_dir / filename
-    target_path.write_bytes(blob)
+    stem_with_uuid = f"{stem}-{uuid4().hex[:12]}"
 
-    public_url = f"/uploads/{year}/{month}/{filename}"
+    settings = await get_or_create_storage_settings(db)
+    cloudinary_config = resolve_cloudinary_config(settings)
+    ensure_cloudinary_config_ready(cloudinary_config)
+    public_id = build_cloud_public_id(
+        folder_prefix=cloudinary_config.get("folder_prefix") or "codion",
+        year=year,
+        month=month,
+        stem_with_uuid=stem_with_uuid,
+    )
+    result = upload_blob_to_cloudinary(
+        blob,
+        public_id=public_id,
+        content_type=content_type,
+        config=cloudinary_config,
+    )
+    public_url = str(result.get("secure_url") or "")
+    if not public_url:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Cloudinary upload failed to return an image URL.",
+        )
+
     return {"url": public_url, "size": len(blob), "content_type": content_type}
 
 

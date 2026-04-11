@@ -144,7 +144,7 @@ function UploadProgress({ current, total }) {
 }
 
 // ── Main Modal ─────────────────────────────────────────────────────────────
-export default function UploadMediaModal({ isOpen, onClose, onUploaded }) {
+export default function UploadMediaModal({ isOpen, onClose, onUploaded, storageTargetLabel = "Cloudinary CDN" }) {
   const [fileQueue, setFileQueue] = useState([]); // { key, file, name, size, kind, previewUrl, error }
   const [isUploading, setIsUploading] = useState(false);
   const [uploaded, setUploaded] = useState(null); // count on success
@@ -397,7 +397,7 @@ export default function UploadMediaModal({ isOpen, onClose, onUploaded }) {
           {/* Security note */}
           <div className="umm-security">
             <ShieldCheck size={12} />
-            Uploads require admin authentication and pass type/size validation before storage.
+            Uploads happen directly from this admin panel and are stored in {storageTargetLabel}. Files still pass admin auth and type/size validation first.
           </div>
 
           {/* Actions */}

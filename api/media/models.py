@@ -29,6 +29,9 @@ class MediaFile(Base):
 
     # URL is also text to avoid key-too-long issues.
     url = Column(Text, nullable=False)
+    storage_provider = Column(String(32), nullable=False, default="local")
+    cloud_public_id = Column(Text, nullable=True)
+    cloud_resource_type = Column(String(32), nullable=True)
 
     uploaded_by_id = Column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -45,3 +48,27 @@ class MediaFile(Base):
 
     def __repr__(self) -> str:
         return f"<MediaFile id={self.id} filename={self.filename!r} category={self.category!r}>"
+
+
+class MediaStorageSettings(Base):
+    __tablename__ = "media_storage_settings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    active_provider = Column(String(32), nullable=False, default="local")
+
+    cloudinary_cloud_name = Column(String(128), nullable=True)
+    cloudinary_api_key = Column(String(128), nullable=True)
+    cloudinary_api_secret = Column(Text, nullable=True)
+    cloudinary_folder_prefix = Column(String(255), nullable=False, default="codion")
+
+    last_tested_at = Column(DateTime, nullable=True)
+    last_test_status = Column(String(32), nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    updated_by_id = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    updated_by = relationship("User", foreign_keys=[updated_by_id])
+
+    def __repr__(self) -> str:
+        return f"<MediaStorageSettings id={self.id} active_provider={self.active_provider!r}>"

@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { X, Search, Image as ImageIcon, CheckCircle, Upload } from "lucide-react";
-import { listMedia } from "../../../shared/mediaApi.js";
+import { getMediaStorageSettings, listMedia } from "../../../shared/mediaApi.js";
 import UploadMediaModal from "./UploadMediaModal.jsx";
 import "./MediaPickerModal.css";
 
@@ -11,14 +11,26 @@ export default function MediaPickerModal({ isOpen, onClose, onSelect }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("image"); // Default to images
   const [selectedItem, setSelectedItem] = useState(null);
+  const [storageTargetLabel, setStorageTargetLabel] = useState("Cloudinary CDN");
   
   const [showUpload, setShowUpload] = useState(false);
 
   useEffect(() => {
     if (isOpen && !showUpload) {
       fetchMedia();
+      void fetchStorageTarget();
     }
   }, [isOpen, category, query, showUpload]);
+
+  async function fetchStorageTarget() {
+    try {
+      const settings = await getMediaStorageSettings();
+      const active = (settings?.active_provider || "cloudinary").toLowerCase();
+      setStorageTargetLabel(active === "cloudinary" ? "Cloudinary CDN" : "Cloudinary CDN");
+    } catch {
+      setStorageTargetLabel("Cloudinary CDN");
+    }
+  }
 
   async function fetchMedia() {
     setLoading(true);
@@ -58,6 +70,12 @@ export default function MediaPickerModal({ isOpen, onClose, onSelect }) {
           <button className="mp-btn mp-btn--primary" onClick={() => setShowUpload(true)}>
             <Upload size={16} /> Upload New
           </button>
+        </div>
+
+        <div className="mp-modal__controls" style={{ paddingTop: 0 }}>
+          <div className="mp-storage-note">
+            Admin uploads are stored in: <strong>{storageTargetLabel}</strong>
+          </div>
         </div>
 
         <div className="mp-modal__body">
@@ -125,6 +143,7 @@ export default function MediaPickerModal({ isOpen, onClose, onSelect }) {
             setShowUpload(false);
             fetchMedia();
           }}
+          storageTargetLabel={storageTargetLabel}
         />
       )}
     </div>

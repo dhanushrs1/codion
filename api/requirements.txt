@@ -36,3 +36,6 @@ passlib[bcrypt]==1.7.4
 
 # JWT encoding / decoding.
 python-jose[cryptography]==3.3.0
+
+# Cloud media storage provider SDK.
+cloudinary==1.44.1

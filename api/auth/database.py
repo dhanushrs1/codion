@@ -25,6 +25,7 @@ async def init_db() -> None:
     # BUT media.router -> auth.database (would deadlock at module load time)
     # Importing inside the function ensures auth.database is fully initialized first.
     from media.models import MediaFile as _MediaFile  # noqa: F401 — registers on Base.metadata
+    from media.models import MediaStorageSettings as _MediaStorageSettings  # noqa: F401
 
     async with engine.begin() as conn:
         # create_all is idempotent — only creates tables that don't already exist.
@@ -42,6 +43,10 @@ async def init_db() -> None:
             "ALTER TABLE exercises ADD COLUMN theory_content TEXT NULL",
             # Tracks table additions
             "ALTER TABLE tracks ADD COLUMN featured_image_url VARCHAR(1024) NULL",
+            # Media files table additions
+            "ALTER TABLE media_files ADD COLUMN storage_provider VARCHAR(32) NOT NULL DEFAULT 'local'",
+            "ALTER TABLE media_files ADD COLUMN cloud_public_id TEXT NULL",
+            "ALTER TABLE media_files ADD COLUMN cloud_resource_type VARCHAR(32) NULL",
         ]
         for migration_sql in migrations:
             try:

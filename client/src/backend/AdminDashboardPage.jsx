@@ -11,12 +11,14 @@ import {
   ChevronLeft,
   Menu,
   FolderTree,
+  Settings2,
 } from "lucide-react";
 import { APP_ROUTES } from "../routes/paths.js";
 import { apiUrl } from "../shared/api.js";
 import UserManagement from "./users/UserManagement.jsx";
 import TrackManagerPage from "./curriculum/file-manager/TrackManagerPage.jsx";
 import MediaLibraryPage from "./media/MediaLibraryPage.jsx";
+import AdminSettingsPage from "./settings/AdminSettingsPage.jsx";
 import "./AdminDashboardPage.css";
 
 // ── Sidebar items ──────────────────────────────────────────────────────────
@@ -26,6 +28,7 @@ const NAV_ITEMS = [
   { key: "tracks", label: "Track Manager", icon: FolderTree },
   { key: "media", label: "Media Library", icon: Image },
   { key: "users", label: "User Management", icon: Users },
+  { key: "settings", label: "Settings", icon: Settings2 },
 ];
 
 const NAV_KEY_SET = new Set(NAV_ITEMS.map((item) => item.key));
@@ -386,6 +389,7 @@ export default function AdminDashboardPage() {
               onSessionExpired={handleSessionExpired}
             />
           )}
+          {activeKey === "settings" && <AdminSettingsPage />}
         </div>
       </div>
     </main>

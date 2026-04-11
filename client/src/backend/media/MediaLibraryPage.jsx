@@ -16,7 +16,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { deleteMediaFile, listMedia } from "../../shared/mediaApi.js";
+import { deleteMediaFile, getMediaStorageSettings, listMedia } from "../../shared/mediaApi.js";
 import UploadMediaModal from "./components/UploadMediaModal.jsx";
 import "./MediaLibraryPage.css";
 
@@ -302,6 +302,7 @@ export default function MediaLibraryPage() {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [deletingKey, setDeletingKey] = useState("");
   const [viewMode, setViewMode] = useState("grid");
+  const [storageTargetLabel, setStorageTargetLabel] = useState("Cloudinary CDN");
 
   const debounceTimer = useRef(null);
 
@@ -314,6 +315,20 @@ export default function MediaLibraryPage() {
   useEffect(() => {
     void loadMedia(false);
   }, [debouncedQuery, category]);
+
+  useEffect(() => {
+    void loadStorageSettings();
+  }, []);
+
+  async function loadStorageSettings() {
+    try {
+      const settings = await getMediaStorageSettings();
+      const active = (settings?.active_provider || "cloudinary").toLowerCase();
+      setStorageTargetLabel(active === "cloudinary" ? "Cloudinary CDN" : "Cloudinary CDN");
+    } catch {
+      setStorageTargetLabel("Cloudinary CDN");
+    }
+  }
 
   async function loadMedia(isRefresh = false) {
     if (isRefresh) setRefreshing(true);
@@ -362,13 +377,14 @@ export default function MediaLibraryPage() {
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
         onUploaded={() => void loadMedia(true)}
+        storageTargetLabel={storageTargetLabel}
       />
 
       {/* Header — same pattern as um-header */}
       <div className="ml-header">
         <div className="ml-header-content">
           <h2 className="ml-title">Media Library</h2>
-          <p className="ml-subtitle">Upload and manage images, videos, audio, and documents.</p>
+          <p className="ml-subtitle">Upload and manage images, videos, audio, and documents from admin panel. Active destination: {storageTargetLabel}.</p>
         </div>
         <div className="ml-header-actions">
           <button

@@ -64,6 +64,15 @@
   border-bottom: 1px solid var(--border-light);
 }
 
+.mp-storage-note {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.mp-storage-note strong {
+  color: var(--text-primary);
+}
+
 .mp-search {
   position: relative;
   flex: 1;
