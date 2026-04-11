@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Image,
   LayoutDashboard,
@@ -15,7 +15,7 @@ import {
 import { APP_ROUTES } from "../routes/paths.js";
 import { apiUrl } from "../shared/api.js";
 import UserManagement from "./users/UserManagement.jsx";
-import CurriculumFileManager from "./curriculum/file-manager/CurriculumFileManager.jsx";
+import TrackManagerPage from "./curriculum/file-manager/TrackManagerPage.jsx";
 import MediaLibraryPage from "./media/MediaLibraryPage.jsx";
 import "./AdminDashboardPage.css";
 
@@ -26,6 +26,20 @@ const NAV_ITEMS = [
   { key: "tracks", label: "Track Manager", icon: FolderTree },
   { key: "media", label: "Media Library", icon: Image },
   { key: "users", label: "User Management", icon: Users },
+];
+
+const NAV_KEY_SET = new Set(NAV_ITEMS.map((item) => item.key));
+const TRACK_QUERY_KEYS = [
+  "trackPage",
+  "mode",
+  "trackId",
+  "nodeType",
+  "sectionId",
+  "exerciseId",
+  "taskId",
+  "levelTab",
+  "page",
+  "perPage",
 ];
 
 // ── Live clock ─────────────────────────────────────────────────────────────
@@ -204,17 +218,50 @@ const ELEVATED = new Set(["ADMIN", "EDITOR"]);
 
 export default function AdminDashboardPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [role, setRole] = useState("USER");
   const [username, setUsername] = useState("guest");
   const [avatarUrl, setAvatarUrl] = useState("");
-  const [activeKey, setActiveKey] = useState("overview");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const handleMenuSelect = (key) => {
-    setActiveKey(key);
-  };
+  const activeKey = useMemo(() => {
+    const tab = (searchParams.get("tab") || "").toLowerCase();
+    return NAV_KEY_SET.has(tab) ? tab : "overview";
+  }, [searchParams]);
+
+  const handleMenuSelect = useCallback(
+    (key) => {
+      if (!NAV_KEY_SET.has(key) || key === activeKey) {
+        return;
+      }
+
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("tab", key);
+
+        // Track manager uses additional query params; clear them when leaving the tab.
+        if (key !== "tracks") {
+          TRACK_QUERY_KEYS.forEach((queryKey) => next.delete(queryKey));
+        }
+
+        return next;
+      });
+    },
+    [activeKey, setSearchParams]
+  );
+
+  useEffect(() => {
+    const tab = (searchParams.get("tab") || "").toLowerCase();
+    if (!NAV_KEY_SET.has(tab)) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("tab", "overview");
+        return next;
+      }, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const clearSessionAndRedirect = useCallback(() => {
     ["codion_token", "codion_role", "codion_username", "codion_avatar_url", "codion_setup_token"].forEach(
@@ -330,7 +377,7 @@ export default function AdminDashboardPage() {
 
         <div className="ap-body">
           {activeKey === "overview" && <OverviewPage />}
-          {activeKey === "tracks" && <CurriculumFileManager onEnterEditor={() => setIsSidebarOpen(false)} />}
+          {activeKey === "tracks" && <TrackManagerPage onEnterEditor={() => setIsSidebarOpen(false)} />}
           {activeKey === "media" && <MediaLibraryPage />}
           {activeKey === "users" && (
             <UserManagement

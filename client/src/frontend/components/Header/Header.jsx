@@ -219,7 +219,7 @@ export default function Header({
               <>
                 {isElevatedUser ? (
                   <Link
-                    to={APP_ROUTES.adminDashboard}
+                    to={APP_ROUTES.adminDashboardTab("overview")}
                     className="btn btn-brand nav-dashboard-btn"
                     aria-label="Open elevated panel"
                     onClick={handleElevatedPanelClick}

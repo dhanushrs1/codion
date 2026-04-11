@@ -45,20 +45,37 @@ export default function App() {
       {/* Admin Panel remains isolated without global header/footer */}
       <Route
         path={APP_ROUTES.adminRoot}
-        element={<Navigate to={APP_ROUTES.adminDashboard} replace />}
+        element={<Navigate to={APP_ROUTES.adminDashboardTab("overview")} replace />}
       />
       <Route
         path={APP_ROUTES.adminDashboard}
         element={<AdminDashboardPage />}
       />
       <Route
+        path={APP_ROUTES.adminOverviewLegacy}
+        element={<Navigate to={APP_ROUTES.adminDashboardTab("overview")} replace />}
+      />
+      <Route
+        path={APP_ROUTES.adminTracksLegacy}
+        element={<Navigate to={APP_ROUTES.adminDashboardTab("tracks")} replace />}
+      />
+      <Route
+        path={APP_ROUTES.adminMediaLegacy}
+        element={<Navigate to={APP_ROUTES.adminDashboardTab("media")} replace />}
+      />
+      <Route
+        path={APP_ROUTES.adminUsersLegacy}
+        element={<Navigate to={APP_ROUTES.adminDashboardTab("users")} replace />}
+      />
+      <Route
         path={APP_ROUTES.backendRootLegacy}
-        element={<Navigate to={APP_ROUTES.adminDashboard} replace />}
+        element={<Navigate to={APP_ROUTES.adminDashboardTab("overview")} replace />}
       />
       <Route
         path={APP_ROUTES.backendDashboardLegacy}
-        element={<Navigate to={APP_ROUTES.adminDashboard} replace />}
+        element={<Navigate to={APP_ROUTES.adminDashboardTab("overview")} replace />}
       />
+      <Route path="/admin/*" element={<Navigate to={APP_ROUTES.adminDashboardTab("overview")} replace />} />
 
       <Route path="*" element={<NotFoundPage />} />
     </Routes>

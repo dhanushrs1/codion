@@ -15,9 +15,16 @@ export const APP_ROUTES = Object.freeze({
   frontendTracksLegacy: "/frontend/tracks",
   frontendWorkspaceLegacy: "/frontend/workspace",
 
-  // Admin routes remain canonical.
+  // Admin routes (query-driven canonical pattern).
   adminRoot: "/admin",
   adminDashboard: "/admin/dashboard",
+  adminDashboardTab: (tab = "overview") => `/admin/dashboard?tab=${encodeURIComponent(tab)}`,
+
+  // Legacy path-based admin section slugs kept for redirects.
+  adminOverviewLegacy: "/admin/overview",
+  adminTracksLegacy: "/admin/tracks",
+  adminMediaLegacy: "/admin/media",
+  adminUsersLegacy: "/admin/users",
 
   // Legacy backend slugs from previous rename, kept for compatibility.
   backendRootLegacy: "/backend",

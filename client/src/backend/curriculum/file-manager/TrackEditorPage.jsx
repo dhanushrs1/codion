@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   BookOpen,
   ChevronDown,
@@ -6,11 +7,8 @@ import {
   FileCode2,
   Folder,
   FolderOpen,
-  GripVertical,
   ImagePlus,
-  Loader2,
   Plus,
-  RefreshCw,
   Save,
   Trash2,
   Upload,
@@ -19,7 +17,6 @@ import {
   createExercise,
   createSection,
   createTask,
-  createTrack,
   deleteExercise,
   deleteSection,
   deleteTask,
@@ -31,7 +28,6 @@ import {
   reorderExercises,
   reorderSections,
   reorderTasks,
-  reorderTracks,
   updateExercise,
   updateSection,
   updateTask,
@@ -39,7 +35,7 @@ import {
 } from "../../../shared/curriculumApi.js";
 import ExerciseStudio from "../studio/ExerciseStudio.jsx";
 import MediaPickerModal from "../../media/components/MediaPickerModal.jsx";
-import "./CurriculumFileManager.css";
+import "./TrackManagerShared.css";
 
 const LANGUAGE_OPTIONS = [
   { value: 71, label: "Python (3.8.1)" },
@@ -49,6 +45,17 @@ const LANGUAGE_OPTIONS = [
   { value: 50, label: "C (GCC 9.2.0)" },
   { value: 73, label: "Rust (1.40.0)" },
   { value: 60, label: "Go (1.40.0)" },
+];
+
+const TRACK_EDITOR_QUERY_KEYS = [
+  "trackPage",
+  "mode",
+  "trackId",
+  "nodeType",
+  "sectionId",
+  "exerciseId",
+  "taskId",
+  "levelTab",
 ];
 
 function formatTaskTitle(task) {
@@ -75,7 +82,15 @@ function parseJsonSafe(value) {
   return JSON.parse(value);
 }
 
-export default function CurriculumFileManager({ onEnterEditor }) {
+function toPositiveInt(value) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+export default function TrackEditorPage({ trackId, onBackToList, onEnterEditor }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const hasHydratedFromUrl = useRef(false);
+
   const [tracks, setTracks] = useState([]);
   const [sectionsByTrack, setSectionsByTrack] = useState({});
   const [exercisesBySection, setExercisesBySection] = useState({});
@@ -84,13 +99,10 @@ export default function CurriculumFileManager({ onEnterEditor }) {
   const [expanded, setExpanded] = useState({});
   const [branchLoading, setBranchLoading] = useState({});
 
-  const [selectedNode, setSelectedNode] = useState(null);
+  const [selectedNode, setSelectedNode] = useState({ type: "track", trackId });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-
-  const [newTrackTitle, setNewTrackTitle] = useState("");
-  const [newTrackLanguageId, setNewTrackLanguageId] = useState("71");
 
   const [newSectionTitle, setNewSectionTitle] = useState("");
   const [newExerciseTitle, setNewExerciseTitle] = useState("");
@@ -109,18 +121,8 @@ export default function CurriculumFileManager({ onEnterEditor }) {
   const [taskTestCases, setTaskTestCases] = useState("[]");
 
   const [showMediaPicker, setShowMediaPicker] = useState(false);
-
   const [studioExercise, setStudioExercise] = useState(null);
-  
-  // New "list" or "editor" view state
-  const [viewMode, setViewMode] = useState("list");
-  // Holds the ID of the specific track being edited
-  const [activeEditorTrackId, setActiveEditorTrackId] = useState(null);
-  
-  // Level editing tab state
-  const [levelTab, setLevelTab] = useState("theory"); // "theory" or "code"
-  
-  const [isCreatingTrack, setIsCreatingTrack] = useState(false);
+  const [levelTab, setLevelTab] = useState("theory");
 
   const trackMap = useMemo(() => {
     return new Map(tracks.map((track) => [track.id, track]));
@@ -152,7 +154,17 @@ export default function CurriculumFileManager({ onEnterEditor }) {
 
   useEffect(() => {
     void loadTracks();
-  }, []);
+  }, [trackId]);
+
+  useEffect(() => {
+    onEnterEditor?.();
+  }, [onEnterEditor]);
+
+  useEffect(() => {
+    setSelectedNode({ type: "track", trackId });
+    setExpanded((prev) => ({ ...prev, [`track-${trackId}`]: true }));
+    void loadSections(trackId);
+  }, [trackId]);
 
   useEffect(() => {
     if (!selectedNode) {
@@ -167,7 +179,7 @@ export default function CurriculumFileManager({ onEnterEditor }) {
       void loadExercises(selectedNode.sectionId);
     }
 
-    if (selectedNode.type === "exercise") {
+    if (selectedNode.type === "exercise" || selectedNode.type === "task") {
       void loadTasks(selectedNode.exerciseId);
     }
 
@@ -213,14 +225,116 @@ export default function CurriculumFileManager({ onEnterEditor }) {
     }
   }, [selectedNode, trackMap, sectionMap, exerciseMap, taskMap]);
 
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+
+    const nodeType = searchParams.get("nodeType");
+    const sectionId = toPositiveInt(searchParams.get("sectionId"));
+    const exerciseId = toPositiveInt(searchParams.get("exerciseId"));
+    const taskId = toPositiveInt(searchParams.get("taskId"));
+    const levelTabParam = searchParams.get("levelTab");
+
+    if (levelTabParam === "code" || levelTabParam === "theory") {
+      setLevelTab(levelTabParam);
+    } else {
+      setLevelTab("theory");
+    }
+
+    let nextNode = {
+      type: "track",
+      trackId,
+    };
+
+    const nextExpanded = {
+      [`track-${trackId}`]: true,
+    };
+
+    if (nodeType === "section" && sectionId) {
+      nextNode = {
+        type: "section",
+        trackId,
+        sectionId,
+      };
+      nextExpanded[`section-${sectionId}`] = true;
+    }
+
+    if (nodeType === "exercise" && sectionId && exerciseId) {
+      nextNode = {
+        type: "exercise",
+        trackId,
+        sectionId,
+        exerciseId,
+      };
+      nextExpanded[`section-${sectionId}`] = true;
+      nextExpanded[`exercise-${exerciseId}`] = true;
+    }
+
+    if (nodeType === "task" && sectionId && exerciseId && taskId) {
+      nextNode = {
+        type: "task",
+        trackId,
+        sectionId,
+        exerciseId,
+        taskId,
+      };
+      nextExpanded[`section-${sectionId}`] = true;
+      nextExpanded[`exercise-${exerciseId}`] = true;
+    }
+
+    setExpanded((prev) => ({ ...prev, ...nextExpanded }));
+    setSelectedNode(nextNode);
+
+    hasHydratedFromUrl.current = true;
+  }, [loading, searchParams, trackId]);
+
+  useEffect(() => {
+    if (!hasHydratedFromUrl.current || loading) {
+      return;
+    }
+
+    const next = new URLSearchParams(searchParams);
+    TRACK_EDITOR_QUERY_KEYS.forEach((queryKey) => next.delete(queryKey));
+
+    next.set("tab", "tracks");
+    next.set("trackPage", "editor");
+    next.set("trackId", String(trackId));
+
+    const node =
+      selectedNode && selectedNode.trackId === trackId
+        ? selectedNode
+        : { type: "track", trackId };
+
+    next.set("nodeType", node.type);
+
+    if (node.sectionId) {
+      next.set("sectionId", String(node.sectionId));
+    }
+
+    if (node.exerciseId) {
+      next.set("exerciseId", String(node.exerciseId));
+    }
+
+    if (node.taskId) {
+      next.set("taskId", String(node.taskId));
+    }
+
+    if (node.type === "task" && levelTab === "code") {
+      next.set("levelTab", "code");
+    }
+
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [levelTab, loading, searchParams, selectedNode, setSearchParams, trackId]);
+
   async function loadTracks() {
     setLoading(true);
     setError("");
     try {
       const data = await getTracks();
       setTracks(data || []);
-      // Intentionally distinct from setting an initial selectedNode, 
-      // instead we stay on the default "list" view initially.
     } catch (err) {
       setError(err.message || "Failed to load tracks.");
     } finally {
@@ -228,16 +342,16 @@ export default function CurriculumFileManager({ onEnterEditor }) {
     }
   }
 
-  async function loadSections(trackId, force = false) {
-    if (!force && sectionsByTrack[trackId]) {
+  async function loadSections(currentTrackId, force = false) {
+    if (!force && sectionsByTrack[currentTrackId]) {
       return;
     }
 
-    const key = `track-${trackId}`;
+    const key = `track-${currentTrackId}`;
     setBranchLoading((prev) => ({ ...prev, [key]: true }));
     try {
-      const data = await getSections(trackId);
-      setSectionsByTrack((prev) => ({ ...prev, [trackId]: data || [] }));
+      const data = await getSections(currentTrackId);
+      setSectionsByTrack((prev) => ({ ...prev, [currentTrackId]: data || [] }));
     } catch (err) {
       setError(err.message || "Failed to load sections.");
     } finally {
@@ -283,12 +397,12 @@ export default function CurriculumFileManager({ onEnterEditor }) {
     return Boolean(expanded[key]);
   }
 
-  async function toggleTrack(trackId) {
-    const key = `track-${trackId}`;
+  async function toggleTrack(currentTrackId) {
+    const key = `track-${currentTrackId}`;
     const nextExpanded = !isExpanded(key);
     setExpanded((prev) => ({ ...prev, [key]: nextExpanded }));
     if (nextExpanded) {
-      await loadSections(trackId);
+      await loadSections(currentTrackId);
     }
   }
 
@@ -307,30 +421,6 @@ export default function CurriculumFileManager({ onEnterEditor }) {
     setExpanded((prev) => ({ ...prev, [key]: nextExpanded }));
     if (nextExpanded) {
       await loadTasks(exerciseId);
-    }
-  }
-
-  async function handleCreateTrack(event) {
-    event.preventDefault();
-    if (!newTrackTitle.trim()) {
-      return;
-    }
-
-    setSaving(true);
-    setError("");
-    try {
-      await createTrack({
-        title: newTrackTitle.trim(),
-        description: "New Track Description",
-        language_id: Number(newTrackLanguageId),
-      });
-      setNewTrackTitle("");
-      setIsCreatingTrack(false);
-      await loadTracks();
-    } catch (err) {
-      setError(err.message || "Failed to create track.");
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -356,7 +446,7 @@ export default function CurriculumFileManager({ onEnterEditor }) {
     }
   }
 
-  async function handleDeleteTrack(trackId) {
+  async function handleDeleteTrack(currentTrackId) {
     const ok = window.confirm("Delete this track and all nested items?");
     if (!ok) {
       return;
@@ -365,9 +455,9 @@ export default function CurriculumFileManager({ onEnterEditor }) {
     setSaving(true);
     setError("");
     try {
-      await deleteTrack(trackId);
-      setSelectedNode(null);
+      await deleteTrack(currentTrackId);
       await loadTracks();
+      onBackToList?.();
     } catch (err) {
       setError(err.message || "Failed to delete track.");
     } finally {
@@ -375,23 +465,7 @@ export default function CurriculumFileManager({ onEnterEditor }) {
     }
   }
 
-  async function handleTrackMove(trackId, direction) {
-    const index = tracks.findIndex((track) => track.id === trackId);
-    const reordered = moveWithSwap(tracks, index, direction);
-    if (reordered === tracks) {
-      return;
-    }
-
-    setTracks(reordered);
-    try {
-      await reorderTracks(reordered.map((track) => track.id));
-    } catch (err) {
-      setError(err.message || "Failed to reorder tracks.");
-      await loadTracks();
-    }
-  }
-
-  async function handleCreateSection(trackId) {
+  async function handleCreateSection(currentTrackId) {
     if (!newSectionTitle.trim()) {
       return;
     }
@@ -399,10 +473,10 @@ export default function CurriculumFileManager({ onEnterEditor }) {
     setSaving(true);
     setError("");
     try {
-      await createSection(trackId, { title: newSectionTitle.trim() });
+      await createSection(currentTrackId, { title: newSectionTitle.trim() });
       setNewSectionTitle("");
-      await loadSections(trackId, true);
-      setExpanded((prev) => ({ ...prev, [`track-${trackId}`]: true }));
+      await loadSections(currentTrackId, true);
+      setExpanded((prev) => ({ ...prev, [`track-${currentTrackId}`]: true }));
     } catch (err) {
       setError(err.message || "Failed to create section.");
     } finally {
@@ -427,7 +501,7 @@ export default function CurriculumFileManager({ onEnterEditor }) {
     }
   }
 
-  async function handleDeleteSection(trackId, sectionId) {
+  async function handleDeleteSection(currentTrackId, sectionId) {
     const ok = window.confirm("Delete this section and all exercises in it?");
     if (!ok) {
       return;
@@ -437,8 +511,8 @@ export default function CurriculumFileManager({ onEnterEditor }) {
     setError("");
     try {
       await deleteSection(sectionId);
-      setSelectedNode({ type: "track", trackId });
-      await loadSections(trackId, true);
+      setSelectedNode({ type: "track", trackId: currentTrackId });
+      await loadSections(currentTrackId, true);
     } catch (err) {
       setError(err.message || "Failed to delete section.");
     } finally {
@@ -446,20 +520,20 @@ export default function CurriculumFileManager({ onEnterEditor }) {
     }
   }
 
-  async function handleSectionMove(trackId, sectionId, direction) {
-    const sections = sectionsByTrack[trackId] || [];
+  async function handleSectionMove(currentTrackId, sectionId, direction) {
+    const sections = sectionsByTrack[currentTrackId] || [];
     const index = sections.findIndex((section) => section.id === sectionId);
     const reordered = moveWithSwap(sections, index, direction);
     if (reordered === sections) {
       return;
     }
 
-    setSectionsByTrack((prev) => ({ ...prev, [trackId]: reordered }));
+    setSectionsByTrack((prev) => ({ ...prev, [currentTrackId]: reordered }));
     try {
       await reorderSections(reordered.map((section) => section.id));
     } catch (err) {
       setError(err.message || "Failed to reorder sections.");
-      await loadSections(trackId, true);
+      await loadSections(currentTrackId, true);
     }
   }
 
@@ -509,7 +583,7 @@ export default function CurriculumFileManager({ onEnterEditor }) {
     setError("");
     try {
       await deleteExercise(exerciseId);
-      setSelectedNode({ type: "section", sectionId, trackId: selectedNode?.trackId || null });
+      setSelectedNode({ type: "section", sectionId, trackId: selectedNode?.trackId || trackId });
       await loadExercises(sectionId, true);
     } catch (err) {
       setError(err.message || "Failed to delete exercise.");
@@ -603,7 +677,7 @@ export default function CurriculumFileManager({ onEnterEditor }) {
         type: "exercise",
         exerciseId,
         sectionId: selectedNode?.sectionId || null,
-        trackId: selectedNode?.trackId || null,
+        trackId: selectedNode?.trackId || trackId,
       });
       await loadTasks(exerciseId, true);
     } catch (err) {
@@ -646,33 +720,16 @@ export default function CurriculumFileManager({ onEnterEditor }) {
     setShowMediaPicker(false);
   }
 
-  function openTrackEditor(trackId) {
-    setActiveEditorTrackId(trackId);
-    setViewMode("editor");
-    setSelectedNode({ type: "track", trackId });
-    setExpanded((prev) => ({ ...prev, [`track-${trackId}`]: true }));
-    void loadSections(trackId);
-    onEnterEditor?.();
-  }
-
-  function goBackToList() {
-    setViewMode("list");
-    setActiveEditorTrackId(null);
-    setSelectedNode(null);
-  }
-
   function renderTree() {
     if (loading) {
       return <div className="cfm-tree-empty">Loading curriculum...</div>;
     }
 
-    if (!tracks.length) {
-      return <div className="cfm-tree-empty">No tracks yet. Create your first track.</div>;
-    }
+    const filteredTracks = tracks.filter((track) => track.id === trackId);
 
-    const filteredTracks = activeEditorTrackId
-      ? tracks.filter((t) => t.id === activeEditorTrackId)
-      : tracks;
+    if (!filteredTracks.length) {
+      return <div className="cfm-tree-empty">Track not found. Go back to track list.</div>;
+    }
 
     return (
       <ul className="cfm-tree-list">
@@ -1253,104 +1310,16 @@ export default function CurriculumFileManager({ onEnterEditor }) {
     );
   }
 
-  if (viewMode === "list") {
-    return (
-      <div className="cfm-root">
-        <div className="cfm-topbar">
-          <div>
-            <h2>Track Manager</h2>
-            <p>Manage your curriculum tracks, sections, and levels.</p>
-          </div>
-          <button type="button" className="cfm-btn" onClick={() => setIsCreatingTrack(!isCreatingTrack)}>
-            <Plus size={14} /> New Track
-          </button>
-        </div>
-
-        {error && <div className="cfm-error">{error}</div>}
-
-        {isCreatingTrack && (
-          <div className="cfm-track-create-panel">
-            <h3>Create a New Track</h3>
-            <form onSubmit={handleCreateTrack} className="cfm-track-create-inline">
-              <div className="cfm-track-create-fields">
-                <input
-                  value={newTrackTitle}
-                  onChange={(event) => setNewTrackTitle(event.target.value)}
-                  placeholder="Track title"
-                  required
-                />
-                <select
-                  value={newTrackLanguageId}
-                  onChange={(event) => setNewTrackLanguageId(event.target.value)}
-                >
-                  {LANGUAGE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <div className="cfm-track-create-actions">
-                  <button type="submit" className="cfm-btn" disabled={saving}>
-                    {saving ? <Loader2 size={14} className="cfm-spin" /> : "Create Track"}
-                  </button>
-                  <button type="button" className="cfm-btn cfm-btn--ghost" onClick={() => setIsCreatingTrack(false)}>
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        )}
-
-        <div className="cfm-track-list">
-          {tracks.map((track) => {
-            const langLabel = LANGUAGE_OPTIONS.find(l => l.value === track.language_id)?.label || `Language ID: ${track.language_id}`;
-            return (
-              <div key={track.id} className="cfm-track-row">
-                <div className="cfm-track-row__img">
-                  {track.featured_image_url ? (
-                    <img src={track.featured_image_url} alt={track.title} />
-                  ) : (
-                    <div className="cfm-track-row__placeholder">
-                      <ImagePlus size={18} />
-                    </div>
-                  )}
-                </div>
-                <div className="cfm-track-row__content">
-                  <div className="cfm-track-row__header">
-                    <h3>{track.title}</h3>
-                    <span className="cfm-track-row__lang">{langLabel}</span>
-                  </div>
-                  <p className="cfm-track-row__desc">
-                    {track.description || "No description provided."}
-                  </p>
-                </div>
-                <div className="cfm-track-row__actions">
-                  <button className="cfm-btn cfm-btn--ghost" onClick={() => alert("Analytics feature coming soon")}>
-                    Analytics
-                  </button>
-                  <button className="cfm-btn" onClick={() => openTrackEditor(track.id)}>
-                    Edit Track <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="cfm-root cfm-editor-mode">
       <div className="cfm-topbar">
         <div>
-          <h2>Track File Manager</h2>
-          <p>Editing specific track: manage section → exercise → levels.</p>
+          <h2>Track Editor</h2>
+          <p>Edit this track and manage section → exercise → levels.</p>
         </div>
         <div className="cfm-topbar-actions">
-          <button type="button" className="cfm-btn" onClick={goBackToList}>
-            Back to List
+          <button type="button" className="cfm-btn" onClick={onBackToList}>
+            Back to Tracks
           </button>
         </div>
       </div>
