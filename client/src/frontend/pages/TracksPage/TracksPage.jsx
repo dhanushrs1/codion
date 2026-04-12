@@ -177,7 +177,6 @@ export default function TracksPage() {
         }}
       >
         <div className="container tracksPage__heroInner">
-          <p className="tracksPage__eyebrow">Track Archive</p>
           <h1>Explore Learning Tracks</h1>
           <p>
             Choose a track, continue your progress, and jump back into the latest coding workspace instantly.
@@ -186,16 +185,6 @@ export default function TracksPage() {
       </section>
 
       <div className="container tracksPage__content">
-        <header className="tracksPage__header">
-          <h2>All Available Tracks</h2>
-          <p>Clean card view of every published learning track.</p>
-
-          <div className="tracksPage__stats">
-            <span>{stats.trackCount} tracks</span>
-            <span>{stats.sectionCount} sections</span>
-          </div>
-        </header>
-
         {loading && (
           <div className="tracksPage__status tracksPage__status--loading" role="status">
             <Loader2 size={18} className="tracksPage__spin" />

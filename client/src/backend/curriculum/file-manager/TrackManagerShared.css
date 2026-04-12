@@ -397,6 +397,41 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.cfm-status-toggle {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  margin-right: 8px;
+}
+
+.cfm-status-toggle input {
+  display: none;
+}
+
+.cfm-status-badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.cfm-status-badge.draft {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-medium);
+}
+
+.cfm-status-badge.published {
+  background: rgba(34, 197, 94, 0.15);
+  color: #16a34a;
+  border: 1px solid rgba(34, 197, 94, 0.3);
 }
 
 .cfm-fields-grid {
@@ -514,40 +549,86 @@
 }
 
 .cfm-image-upload-box {
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  background: var(--bg-base);
-  padding: 10px;
+  border: 1px dashed var(--border-medium);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
 }
 
 .cfm-image-upload-box__header {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   color: var(--text-primary);
+  font-size: 1.05rem;
+  margin-bottom: 4px;
 }
 
 .cfm-image-upload-box p {
   font-size: 0.85rem;
   color: var(--text-secondary);
+  line-height: 1.4;
+  margin: 0;
+  max-width: 480px;
 }
 
 .cfm-image-upload-box__row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 8px;
   flex-wrap: wrap;
 }
 
+.cfm-image-preview-container {
+  position: relative;
+  width: 100%;
+  max-width: 600px; /* Wider for banner format */
+  margin: 10px auto 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.cfm-banner-preview .cfm-image-preview {
+  aspect-ratio: 21 / 9; /* Banner ratio */
+}
+
 .cfm-image-preview {
-  width: min(340px, 100%);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-light);
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
   object-fit: cover;
-  background: var(--bg-hover);
+  display: block;
+}
+
+.cfm-image-preview-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.cfm-image-preview-container:hover .cfm-image-preview-overlay {
+  opacity: 1;
+}
+
+.cfm-image-preview-overlay .cfm-btn {
+  pointer-events: none;
+}
+.cfm-image-preview-container:hover .cfm-image-preview-overlay .cfm-btn {
+  pointer-events: auto;
 }
 
 .cfm-tabs {

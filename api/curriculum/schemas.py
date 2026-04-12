@@ -83,6 +83,7 @@ class TrackBase(BaseModel):
     description: Optional[str] = None
     featured_image_url: Optional[str] = None
     language_id: int
+    is_published: Optional[bool] = False
 
 class TrackCreate(TrackBase):
     order: Optional[int] = None
@@ -93,6 +94,7 @@ class TrackUpdate(BaseModel):
     featured_image_url: Optional[str] = None
     language_id: Optional[int] = None
     order: Optional[int] = None
+    is_published: Optional[bool] = None
 
 class TrackInDB(TrackBase):
     id: int

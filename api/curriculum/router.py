@@ -219,6 +219,7 @@ async def create_track(
         featured_image_url=_normalize_track_image_url(payload.featured_image_url),
         language_id=payload.language_id,
         order=order_value,
+        is_published=payload.is_published if payload.is_published is not None else False,
     )
     db.add(item)
     await db.commit()
@@ -255,6 +256,8 @@ async def update_track(
         item.featured_image_url = _normalize_track_image_url(payload.featured_image_url)
     if payload.language_id is not None:
         item.language_id = payload.language_id
+    if payload.is_published is not None:
+        item.is_published = payload.is_published
 
     await db.commit()
     await db.refresh(item)
@@ -840,6 +843,7 @@ async def list_tracks_student(
         .options(
             selectinload(models.Track.sections).selectinload(models.Section.exercises)
         )
+        .where(models.Track.is_published == True)
         .order_by(models.Track.order)
     )
 
@@ -860,6 +864,7 @@ async def get_track_student(
         select(models.Track)
         .options(selectinload(models.Track.sections))
         .where(models.Track.id == track_id)
+        .where(models.Track.is_published == True)
     )
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Track not found")

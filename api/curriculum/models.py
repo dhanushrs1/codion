@@ -11,6 +11,7 @@ class Track(Base):
     featured_image_url = Column(String(1024), nullable=True)
     language_id = Column(Integer, nullable=False)
     order = Column(Integer, nullable=False)
+    is_published = Column(Boolean, default=False, nullable=False)
     
     sections = relationship("Section", back_populates="track", cascade="all, delete-orphan")
 

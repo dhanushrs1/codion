@@ -3,7 +3,7 @@
 }
 
 .tracksPage__hero {
-  min-height: 320px;
+  min-height: 280px;
   background-size: cover;
   background-position: center;
   display: flex;
@@ -14,6 +14,8 @@
   color: #e2e8f0;
   padding-top: 2rem;
   padding-bottom: 2rem;
+  text-align: left;
+  max-width: 800px;
 }
 
 .tracksPage__heroInner h1 {
@@ -24,58 +26,15 @@
 
 .tracksPage__heroInner p {
   margin: 0.8rem 0 0;
-  max-width: 680px;
   color: rgba(241, 245, 249, 0.92);
-  font-size: 1rem;
-}
-
-.tracksPage__eyebrow {
-  margin: 0 0 0.5rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: #bae6fd;
+  font-size: 1.05rem;
+  line-height: 1.6;
 }
 
 .tracksPage__content {
   margin-top: -36px;
   position: relative;
   z-index: 2;
-}
-
-.tracksPage__header {
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
-  background: var(--bg-card);
-  padding: 1rem 1.1rem;
-  margin-bottom: 1rem;
-}
-
-.tracksPage__header h2 {
-  margin: 0;
-  font-size: 1.3rem;
-}
-
-.tracksPage__header p {
-  margin: 0.3rem 0 0;
-  color: var(--text-secondary);
-}
-
-.tracksPage__stats {
-  margin-top: 0.7rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.tracksPage__stats span {
-  border: 1px solid var(--border-light);
-  border-radius: 999px;
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-  padding: 0.2rem 0.6rem;
-  font-size: 0.78rem;
 }
 
 .tracksPage__status {
@@ -110,23 +69,39 @@
 
 .tracksPage__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+@media (min-width: 1024px) {
+  .tracksPage__grid {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 380px));
+  }
 }
 
 .tracksPage__card {
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
+  border-radius: calc(var(--radius-md) + 4px);
   background: var(--bg-card);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+.tracksPage__card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.08);
+  border-color: var(--border-light);
 }
 
 .tracksPage__cardMedia {
   position: relative;
-  height: 170px;
+  aspect-ratio: 21 / 9;
   background: var(--bg-hover);
+  overflow: hidden;
 }
 
 .tracksPage__cardMedia img {
@@ -134,6 +109,11 @@
   height: 100%;
   object-fit: cover;
   display: block;
+  transition: transform 0.5s ease;
+}
+
+.tracksPage__card:hover .tracksPage__cardMedia img {
+  transform: scale(1.04);
 }
 
 .tracksPage__cardLanguage {
@@ -234,11 +214,18 @@
 
 .tracksPage__cta {
   justify-content: center;
+  transition: all 0.2s ease;
 }
 
 .tracksPage__cta:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  transform: none;
+}
+
+.tracksPage__card:hover .tracksPage__cta:not(:disabled) {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
 }
 
 @media (max-width: 700px) {

@@ -43,6 +43,7 @@ async def init_db() -> None:
             "ALTER TABLE exercises ADD COLUMN theory_content TEXT NULL",
             # Tracks table additions
             "ALTER TABLE tracks ADD COLUMN featured_image_url VARCHAR(1024) NULL",
+            "ALTER TABLE tracks ADD COLUMN is_published BOOLEAN NOT NULL DEFAULT 0",
             # Media files table additions
             "ALTER TABLE media_files ADD COLUMN storage_provider VARCHAR(32) NOT NULL DEFAULT 'local'",
             "ALTER TABLE media_files ADD COLUMN cloud_public_id TEXT NULL",

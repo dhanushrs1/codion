@@ -111,6 +111,7 @@ export default function TrackEditorPage({ trackId, onBackToList, onEnterEditor }
   const [trackDescription, setTrackDescription] = useState("");
   const [trackLanguageId, setTrackLanguageId] = useState("71");
   const [trackFeaturedImageUrl, setTrackFeaturedImageUrl] = useState("");
+  const [trackIsPublished, setTrackIsPublished] = useState(false);
 
   const [sectionTitle, setSectionTitle] = useState("");
   const [exerciseTitle, setExerciseTitle] = useState("");
@@ -192,6 +193,7 @@ export default function TrackEditorPage({ trackId, onBackToList, onEnterEditor }
       setTrackDescription(track.description || "");
       setTrackLanguageId(String(track.language_id || 71));
       setTrackFeaturedImageUrl(track.featured_image_url || "");
+      setTrackIsPublished(Boolean(track.is_published));
       return;
     }
 
@@ -437,6 +439,7 @@ export default function TrackEditorPage({ trackId, onBackToList, onEnterEditor }
         description: trackDescription.trim() || null,
         language_id: Number(trackLanguageId),
         featured_image_url: trackFeaturedImageUrl.trim() || null,
+        is_published: trackIsPublished,
       });
       await loadTracks();
     } catch (err) {
@@ -912,6 +915,16 @@ export default function TrackEditorPage({ trackId, onBackToList, onEnterEditor }
         <div className="cfm-editor-header">
           <h3>Track Settings</h3>
           <div className="cfm-editor-actions">
+            <label className="cfm-status-toggle">
+              <input
+                type="checkbox"
+                checked={trackIsPublished}
+                onChange={(e) => setTrackIsPublished(e.target.checked)}
+              />
+              <span className={`cfm-status-badge ${trackIsPublished ? 'published' : 'draft'}`}>
+                {trackIsPublished ? 'Published' : 'Draft'}
+              </span>
+            </label>
             <button type="button" className="cfm-btn cfm-btn--danger" onClick={() => void handleDeleteTrack(track.id)}>
               <Trash2 size={14} /> Delete Track
             </button>
@@ -936,33 +949,68 @@ export default function TrackEditorPage({ trackId, onBackToList, onEnterEditor }
           </label>
 
           <label className="cfm-field-full">
-            <span>Description</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Description</span>
+              <span style={{ fontSize: '0.75rem', color: trackDescription.length > 160 ? 'var(--state-error)' : 'var(--text-secondary)' }}>
+                {trackDescription.length} / 160
+              </span>
+            </div>
             <textarea
               rows={3}
               value={trackDescription}
-              onChange={(event) => setTrackDescription(event.target.value)}
+              onChange={(event) => setTrackDescription(event.target.value.slice(0, 160))}
               placeholder="Track description"
+              maxLength={160}
             />
           </label>
         </div>
 
         <div className="cfm-image-upload-box">
           <div className="cfm-image-upload-box__header">
-            <ImagePlus size={16} />
-            <strong>Featured Image</strong>
+            <ImagePlus size={18} />
+            <strong>Banner Image</strong>
           </div>
-          <p>Select an image from the Media Library or upload a new one to link it to this track.</p>
-          <div className="cfm-image-upload-box__row">
-            <button
-              type="button"
-              className="cfm-btn"
-              onClick={() => setShowMediaPicker(true)}
-            >
-              <Upload size={14} /> Select from Media Library
-            </button>
-          </div>
-          {trackFeaturedImageUrl && (
-            <img src={trackFeaturedImageUrl} alt="Track featured" className="cfm-image-preview" />
+          <p>
+            Select an image from the Media Library or upload a new one to
+            link it to this track. We recommend a wide horizontal banner format.
+          </p>
+
+          {!trackFeaturedImageUrl ? (
+            <div className="cfm-image-upload-box__row">
+              <button
+                type="button"
+                className="cfm-btn cfm-btn--ghost"
+                onClick={() => setShowMediaPicker(true)}
+              >
+                <Upload size={14} /> Select from Media Library
+              </button>
+            </div>
+          ) : (
+            <div className="cfm-image-preview-container cfm-banner-preview">
+              <img
+                src={trackFeaturedImageUrl}
+                alt="Track banner"
+                className="cfm-image-preview"
+              />
+              <div className="cfm-image-preview-overlay">
+                <button
+                  type="button"
+                  title="Replace image"
+                  className="cfm-btn cfm-btn--ghost"
+                  onClick={() => setShowMediaPicker(true)}
+                >
+                  <Upload size={14} /> Replace
+                </button>
+                <button
+                  type="button"
+                  title="Remove image"
+                  className="cfm-btn cfm-btn--danger"
+                  onClick={() => setTrackFeaturedImageUrl("")}
+                >
+                  <Trash2 size={14} /> Delete
+                </button>
+              </div>
+            </div>
           )}
         </div>
 
@@ -989,7 +1037,7 @@ export default function TrackEditorPage({ trackId, onBackToList, onEnterEditor }
           </div>
 
           <ul className="cfm-sublist">
-            {sections.map((section) => (
+            {sections.map((section, index) => (
               <li key={section.id}>
                 <button
                   type="button"
@@ -1005,8 +1053,8 @@ export default function TrackEditorPage({ trackId, onBackToList, onEnterEditor }
                   {section.title}
                 </button>
                 <div className="cfm-sublist-actions">
-                  <button type="button" onClick={() => void handleSectionMove(track.id, section.id, -1)} title="Move up">▲</button>
-                  <button type="button" onClick={() => void handleSectionMove(track.id, section.id, 1)} title="Move down">▼</button>
+                  <button type="button" onClick={() => void handleSectionMove(track.id, section.id, -1)} disabled={index === 0} title="Move up">&#8593;</button>
+                  <button type="button" onClick={() => void handleSectionMove(track.id, section.id, 1)} disabled={index === sections.length - 1} title="Move down">&#8595;</button>
                   <button
                     type="button"
                     className="cfm-sublist-delete"
