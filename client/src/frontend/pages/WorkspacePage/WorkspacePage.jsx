@@ -1,26 +1,27 @@
 import DOMPurify from "dompurify";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import {
   Play, Square, ChevronLeft, ChevronRight, Loader2, Terminal,
   CheckCircle, XCircle, AlertTriangle, Send, User,
-  List, ArrowLeft, Check, Lock,
+  List, ArrowLeft, Check, Lock, Printer, Copy
 } from "lucide-react";
 import { getExerciseWorkspace, evaluateTask, saveTaskProgress, getAllTaskProgress } from "../../../shared/learningApi.js";
 import { APP_ROUTES } from "../../../routes/paths.js";
 import { PythonIcon, JavaIcon, CppIcon, CIcon, JSIcon, SQLIcon, TextIcon } from "../../components/LanguageIcons/LanguageIcons.jsx";
+import settingOptopus from "../../../assets/opto/setting_optopus.png";
 import "./WorkspacePage.css";
 
 /* ── Language helpers ──────────────────────────────────────────────────── */
 const LANG_MAP = {
-  71:  { name: "Python",     ext: "py",   mono: "python",     Icon: PythonIcon, starter: '# Write code below 💖\n' },
-  63:  { name: "JavaScript", ext: "js",   mono: "javascript", Icon: JSIcon,     starter: '// Write code below 💖\n' },
-  62:  { name: "Java",       ext: "java", mono: "java",       Icon: JavaIcon,   starter: '// Write code below 💖\n' },
-  54:  { name: "C++",        ext: "cpp",  mono: "cpp",        Icon: CppIcon,    starter: '// Write code below 💖\n' },
-  50:  { name: "C",          ext: "c",    mono: "c",          Icon: CIcon,      starter: '// Write code below 💖\n' },
-  60:  { name: "Go",         ext: "go",   mono: "go",         Icon: TextIcon,   starter: '// Write code below 💖\n' },
-  73:  { name: "Rust",       ext: "rs",   mono: "rust",       Icon: TextIcon,   starter: '// Write code below 💖\n' },
-  74:  { name: "TypeScript", ext: "ts",   mono: "typescript", Icon: JSIcon,     starter: '// Write code below 💖\n' },
+  71:  { name: "Python",     ext: "py",   mono: "python",     Icon: PythonIcon, starter: "# Write code below\n" },
+  63:  { name: "JavaScript", ext: "js",   mono: "javascript", Icon: JSIcon,     starter: "// Write code below\n" },
+  62:  { name: "Java",       ext: "java", mono: "java",       Icon: JavaIcon,   starter: "// Write code below\n" },
+  54:  { name: "C++",        ext: "cpp",  mono: "cpp",        Icon: CppIcon,    starter: "// Write code below\n" },
+  50:  { name: "C",          ext: "c",    mono: "c",          Icon: CIcon,      starter: "// Write code below\n" },
+  60:  { name: "Go",         ext: "go",   mono: "go",         Icon: TextIcon,   starter: "// Write code below\n" },
+  73:  { name: "Rust",       ext: "rs",   mono: "rust",       Icon: TextIcon,   starter: "// Write code below\n" },
+  74:  { name: "TypeScript", ext: "ts",   mono: "typescript", Icon: JSIcon,     starter: "// Write code below\n" },
 };
 const DEFAULT_LANG = LANG_MAP[71];
 
@@ -80,6 +81,35 @@ function slugify(text) {
     .replace(/ +/g, "-");
 }
 
+/* ── Advanced Garbage Code Preventer ── */
+function isLikelyGarbageCode(code, langId) {
+  const cleanCode = code.trim();
+  
+  // 1. Far too short to be executable (e.g. "kkk")
+  // Most valid basic programs checking assertions have at least 5+ characters.
+  if (cleanCode.length < 5) return true;
+
+  // 2. Just a single contiguous string with no syntax punctuation at all
+  // Basically checks if someone just smashed their keyboard like "asdfasdfasdf" or "kkk"
+  if (/^[a-zA-Z0-9_\s]+$/.test(cleanCode)) {
+    // True python code needs parentheses `()`, quotes `""`, or operators `=`.
+    return true;
+  }
+
+  // 3. Must contain at least SOME standard syntax identifier
+  // e.g., brackets, parentheses, quotes, equals signs, math operators, colons, or dots
+  const hasSyntax = /[()={};:,"'+[\]*/.-]/.test(cleanCode);
+  if (!hasSyntax) return true;
+
+  // 4. Strongly typed C-family languages typically require some brackets or semicolons
+  // 62: Java, 54: C++, 50: C, 73: Rust, 60: Go, 74: TypeScript
+  if ([62, 54, 50, 73, 60, 74].includes(langId)) {
+    if (!/[{}]/.test(cleanCode) && !/[()]/.test(cleanCode) && !/import/.test(cleanCode)) return true;
+  }
+
+  return false;
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    MAIN COMPONENT
    ══════════════════════════════════════════════════════════════════════════ */
@@ -106,6 +136,13 @@ export default function WorkspacePage() {
 
   /* ── UI state ── */
   const [tocOpen, setTocOpen] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [showEmptyWarning, setShowEmptyWarning] = useState(false);
+  const [warningMsg, setWarningMsg] = useState("");
+
+  useEffect(() => {
+    setAvatarUrl(localStorage.getItem("codion_avatar_url") || "");
+  }, []);
 
   /* ── Load exercise data ── */
   useEffect(() => {
@@ -193,10 +230,29 @@ export default function WorkspacePage() {
   /* ── Code execution (Secure) ── */
   async function runCode() {
     if (running || !data || !activeTask) return;
+
+    const langId = detectJudgeLangId(filename, data.language_id);
+    
+    // Prevent empty or unmodified code submission
+    const parsedStarter = parseStarterCode(activeTask, langInfo);
+    if (!code.trim() || code.trim() === parsedStarter.content.trim()) {
+      setWarningMsg("You need to write some code before executing it.");
+      setShowEmptyWarning(true);
+      setTimeout(() => setShowEmptyWarning(false), 4500); // Change this number to adjust disappear time (in milliseconds)
+      return;
+    }
+
+    // Advanced heuristics to block pure garbage syntax ("kkk" etc.)
+    if (isLikelyGarbageCode(code, langId)) {
+      setWarningMsg("This doesn't look like valid logic. Please write proper syntax before running.");
+      setShowEmptyWarning(true);
+      setTimeout(() => setShowEmptyWarning(false), 4500); // Change this number to adjust disappear time (in milliseconds)
+      return;
+    }
+
     setRunning(true);
     setOutput(null);
 
-    const langId = detectJudgeLangId(filename, data.language_id);
     try {
       // We use our protected backend evaluate proxy which checks against hidden test cases.
       const res = await evaluateTask(data.id, activeTask.id, code, langId);
@@ -248,6 +304,54 @@ export default function WorkspacePage() {
   const verdict = output?.verdict;
   const vm = VERDICT_META[verdict] ?? {};
 
+  /* ── Printing ── */
+  function handlePrint() {
+    if (verdict !== "Accepted") return;
+    
+    const printWindow = window.open('', '_blank');
+    const safeOutput = (output?.output || "Passed all hidden tests successfully!")
+      .replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const safeCode = code.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    
+    const htmlContent = `
+      <html>
+        <head>
+          <title>Copy/Print - ${data?.title || 'Exercise'}</title>
+          <style>
+            body { font-family: sans-serif; padding: 30px; color: #333; line-height: 1.6; max-width: 900px; margin: auto; }
+            h1 { font-size: 24px; color: #111; margin-bottom: 5px; }
+            h2 { font-size: 18px; color: #555; margin-top: 0; font-weight: normal; margin-bottom: 30px; }
+            .theory { margin-bottom: 20px; font-size: 15px; }
+            .code-block, .output-block { background: #f8f9fa; padding: 15px; border-radius: 6px; font-family: monospace; white-space: pre-wrap; font-size: 13px; border: 1px solid #e9ecef; }
+            .section-title { margin-top: 30px; border-bottom: 2px solid #eee; padding-bottom: 8px; font-weight: bold; color: #222; margin-bottom: 15px; }
+            @media print { body { padding: 0; } }
+          </style>
+        </head>
+        <body>
+          <h1>${data?.track_title || 'Track'} &rsaquo; ${data?.section_title || 'Section'}</h1>
+          <h2>${data?.title || 'Exercise'} (Level ${activeTaskIndex + 1})</h2>
+          
+          <div class="section-title">Theory & Instructions</div>
+          <div class="theory">
+            ${activeTask?.instructions_md || data?.theory_content || "No instructions provided."}
+          </div>
+          
+          <div class="section-title">Executed Code</div>
+          <pre class="code-block">${safeCode}</pre>
+          
+          <div class="section-title">Execution Output</div>
+          <pre class="output-block">${safeOutput}</pre>
+          
+          <script>
+            window.onload = function() { window.print(); }
+          </script>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+  }
+
   /* ══ LOADING STATE ══ */
   if (loading) {
     return (
@@ -274,12 +378,31 @@ export default function WorkspacePage() {
 
   return (
     <div className="ws-root">
+      <div className="ws-mobile-overlay">
+        Please rotate your device to horizontal to use the Code Workspace. Desktop experience is highly recommended.
+      </div>
+      
+      {/* ════ POPUP EMPTY CODE WARNING ════ */}
+      <div className={`ws-empty-warning-popup ${showEmptyWarning ? 'is-visible' : ''}`}>
+        <div className="ws-empty-warning-character">
+          <img 
+            src={settingOptopus} 
+            alt="Guide" 
+            draggable="false"
+            onContextMenu={(e) => e.preventDefault()}
+            onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = '🤖'; }} 
+          />
+        </div>
+        <div className="ws-empty-warning-bubble">
+          <p><strong>Hey there!</strong> {warningMsg}</p>
+        </div>
+      </div>
       {/* ═══════════ TOP HEADER BAR ═══════════ */}
       <header className="ws-header">
         <div className="ws-header-left">
-          <button className="ws-header-back" onClick={() => navigate(APP_ROUTES.frontendTracks)} title="Back to tracks">
-            <ArrowLeft size={16} />
-          </button>
+          <Link to={APP_ROUTES.home} className="ws-brand-mark">
+            Cod<span style={{ color: "var(--accent-primary)" }}>ion</span>
+          </Link>
           <div className="ws-header-breadcrumb">
             <span className="ws-header-track">{data.track_title}</span>
             <ChevronRight size={12} className="ws-header-sep" />
@@ -288,6 +411,10 @@ export default function WorkspacePage() {
         </div>
 
         <div className="ws-header-center">
+          <div className="ws-runtime-status">
+            <span className="ws-status-dot"></span>
+            <span className="ws-runtime-text">Execution Engine: Ready</span>
+          </div>
           <div className="ws-progress-bar">
             <div className="ws-progress-fill" style={{ width: `${progress}%` }} />
           </div>
@@ -295,11 +422,21 @@ export default function WorkspacePage() {
         </div>
 
         <div className="ws-header-right">
+          <div className="ws-tooltip-wrapper">
+            <button className="ws-icon-btn ws-bug-btn">
+              <AlertTriangle size={18} />
+            </button>
+            <span className="ws-custom-tooltip-text">Report an issue</span>
+          </div>
           <span className="ws-header-exercise-badge">
             Level {activeTaskIndex + 1}/{totalTasks}
           </span>
           <div className="ws-user-profile" title="User Profile">
-            <User size={18} />
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+            ) : (
+              <User size={18} />
+            )}
           </div>
         </div>
       </header>
@@ -378,6 +515,27 @@ export default function WorkspacePage() {
               <FileIcon ext={fileExt} />
               <span>{filename}</span>
             </div>
+            <div className="ws-editor-actions">
+              <div className="ws-tooltip-wrapper">
+                <button className="ws-icon-btn" onClick={() => navigator.clipboard.writeText(code)}>
+                  <Copy size={16} color="var(--text-secondary)" />
+                </button>
+                <span className="ws-custom-tooltip-text" style={{ right: 0, left: 'auto' }}>Copy Code to Clipboard</span>
+              </div>
+              <div className="ws-tooltip-wrapper">
+                <button 
+                  className="ws-icon-btn" 
+                  onClick={handlePrint}
+                  disabled={verdict !== "Accepted"}
+                  style={{ opacity: verdict === "Accepted" ? 1 : 0.4 }}
+                >
+                  <Printer size={16} color={verdict === "Accepted" ? "var(--accent-primary)" : "var(--text-tertiary)"} />
+                </button>
+                <span className="ws-custom-tooltip-text" style={{ right: 0, left: 'auto' }}>
+                  {verdict === "Accepted" ? "Print Exercise Result & Code" : "Run code successfully to enable printing"}
+                </span>
+              </div>
+            </div>
           </div>
 
           {/* Code Editor */}
@@ -439,7 +597,7 @@ export default function WorkspacePage() {
             <div className="ws-terminal-body">
               {!running && !output && (
                 <div className="ws-terminal-placeholder">
-                  <div className="ws-terminal-placeholder-icon">✧</div>
+                  <div className="ws-terminal-placeholder-icon">&gt;_</div>
                   <p>Click <strong>Run & Check</strong> to evaluate against test cases.</p>
                 </div>
               )}
@@ -453,17 +611,28 @@ export default function WorkspacePage() {
 
               {!running && output && (
                 <div className="ws-terminal-result">
+                  {verdict && (
+                    <div className="ws-terminal-verdict-large" style={{ color: vm.color, fontWeight: '700', fontSize: '1.2rem', marginBottom: '8px' }}>
+                      {verdict}
+                    </div>
+                  )}
                   {output.passed_cases !== undefined && (
-                    <div className="ws-terminal-cases-meta">
+                    <div className="ws-terminal-cases-meta" style={{ marginBottom: '12px', color: 'var(--text-secondary)', fontWeight: '600' }}>
                       Passed {output.passed_cases} out of {output.total_cases} test cases.
                     </div>
                   )}
 
                   {output.output && (
-                    <pre className="ws-terminal-stdout">{output.output}</pre>
+                    <div className="ws-terminal-output-block">
+                      <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-tertiary)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Your Console Output</div>
+                      <pre className="ws-terminal-stdout">{output.output}</pre>
+                    </div>
                   )}
                   {output.error && (
-                    <pre className="ws-terminal-stderr">{output.error}</pre>
+                    <div className="ws-terminal-error-block">
+                      <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-tertiary)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Error</div>
+                      <pre className="ws-terminal-stderr">{output.error}</pre>
+                    </div>
                   )}
                   {!output.output && !output.error && !output.passed && (
                      <pre className="ws-terminal-stderr">Check your logic. Output did not match expected hidden test case.</pre>
@@ -485,7 +654,7 @@ export default function WorkspacePage() {
         </div>
         <div className="ws-footer-right">
           <button
-            className="btn btn-ghost ws-nav-btn ws-nav-back"
+            className="btn btn-ghost ws-nav-back"
             onClick={() => goToExercise(prevExercise)}
             disabled={!prevExercise}
           >
@@ -494,7 +663,7 @@ export default function WorkspacePage() {
           </button>
           
           <button
-            className="btn btn-brand ws-nav-btn ws-nav-next"
+            className="btn btn-brand ws-nav-next"
             onClick={() => goToExercise(nextExercise)}
             disabled={!nextExercise || progress < 100}
             title={progress < 100 ? "Complete all levels to unlock" : ""}
