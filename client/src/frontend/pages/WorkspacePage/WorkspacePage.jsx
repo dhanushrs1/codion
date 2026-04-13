@@ -10,6 +10,7 @@ import { getExerciseWorkspace, evaluateTask, saveTaskProgress, getAllTaskProgres
 import { APP_ROUTES } from "../../../routes/paths.js";
 import { PythonIcon, JavaIcon, CppIcon, CIcon, JSIcon, SQLIcon, TextIcon } from "../../components/LanguageIcons/LanguageIcons.jsx";
 import settingOptopus from "../../../assets/opto/setting_optopus.png";
+import successOptopus from "../../../assets/opto/setting_optopus.png"; /* <-- CHANGE THIS PATH TO YOUR NEW SUCCESS IMAGE! */
 import "./WorkspacePage.css";
 
 /* ── Language helpers ──────────────────────────────────────────────────── */
@@ -139,6 +140,7 @@ export default function WorkspacePage() {
   const [avatarUrl, setAvatarUrl] = useState("");
   const [showEmptyWarning, setShowEmptyWarning] = useState(false);
   const [warningMsg, setWarningMsg] = useState("");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setAvatarUrl(localStorage.getItem("codion_avatar_url") || "");
@@ -394,7 +396,7 @@ export default function WorkspacePage() {
       <div className={`ws-empty-warning-popup ${showEmptyWarning ? 'is-visible' : ''}`}>
         <div className="ws-empty-warning-character">
           <img 
-            src={settingOptopus} 
+            src={verdict === "Accepted" ? successOptopus : settingOptopus} 
             alt="Guide" 
             draggable="false"
             onContextMenu={(e) => e.preventDefault()}
@@ -535,10 +537,16 @@ export default function WorkspacePage() {
             </div>
             <div className="ws-editor-actions">
               <div className="ws-tooltip-wrapper">
-                <button className="ws-icon-btn" onClick={() => navigator.clipboard.writeText(code)}>
-                  <Copy size={16} color="var(--text-secondary)" />
+                <button className="ws-icon-btn" onClick={() => {
+                  navigator.clipboard.writeText(code);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}>
+                  {copied ? <Check size={16} color="var(--state-success)" /> : <Copy size={16} color="var(--text-secondary)" />}
                 </button>
-                <span className="ws-custom-tooltip-text" style={{ right: 0, left: 'auto' }}>Copy Code to Clipboard</span>
+                <span className="ws-custom-tooltip-text" style={{ right: 0, left: 'auto' }}>
+                  {copied ? "Copied!" : "Copy Code to Clipboard"}
+                </span>
               </div>
               <div className="ws-tooltip-wrapper">
                 <button 
@@ -664,11 +672,10 @@ export default function WorkspacePage() {
         <div className="ws-footer-right">
           <button
             className="btn btn-ghost ws-nav-back"
-            onClick={() => goToExercise(prevExercise)}
-            disabled={!prevExercise}
+            onClick={() => navigate(APP_ROUTES.frontendTrackOverview(trackSlug))}
           >
             <ChevronLeft size={14} />
-            Back
+            Back to Track
           </button>
           
           <button

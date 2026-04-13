@@ -1108,7 +1108,7 @@ async def evaluate_task(
             "total_cases": len(test_cases)
         }
 
-@router.post("/progress/task/{task_id}", response_model=schemas.UserTaskProgressResponse)
+@router.post("/api/progress/task/{task_id}", response_model=schemas.UserTaskProgressResponse)
 async def mark_task_completed(
     task_id: int,
     request: Request,
@@ -1143,7 +1143,7 @@ async def mark_task_completed(
     await db.refresh(progress)
     return progress
 
-@router.get("/progress/task", response_model=list[schemas.UserTaskProgressResponse])
+@router.get("/api/progress/task", response_model=list[schemas.UserTaskProgressResponse])
 async def get_all_task_progress(
     request: Request,
     db: AsyncSession = Depends(get_db)
