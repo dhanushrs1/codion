@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { X, User, AtSign, ArrowRight, Loader2 } from "lucide-react";
 import { APP_ROUTES } from "../../../routes/paths.js";
 import { apiUrl } from "../../../shared/api.js";
+import octopusBody from "../../../assets/opto/hiding-opto.png";
+import octopusHand from "../../../assets/opto/hiding-opto-hand.png";
 import "./AuthModal.css";
 
 /*
@@ -63,8 +65,13 @@ export default function AuthModal({ isOpen, onClose, onAuthenticate }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose}>
+      <div className="modal-container-wrapper">
+        {/* Layer 1: The octopus body behind the form */}
+        <img src={octopusBody} className="octopus-body" alt="Octopus Body" />
+
+        {/* Layer 2: The actual modal content (form) */}
+        <div className="modal-content pixelated-border" onClick={(e) => e.stopPropagation()}>
+          <button className="modal-close" onClick={onClose}>
           <X size={20} />
         </button>
 
@@ -164,6 +171,10 @@ export default function AuthModal({ isOpen, onClose, onAuthenticate }) {
         <div className="modal-footer">
           <span>By continuing you agree to Codion's Terms of Service.</span>
         </div>
+      </div>
+
+      {/* Layer 3: The octopus hand resting on top */}
+      <img src={octopusHand} className="octopus-hand" alt="Octopus Hand" />
       </div>
     </div>
   );

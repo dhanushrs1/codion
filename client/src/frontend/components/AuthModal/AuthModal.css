@@ -15,6 +15,58 @@
   animation: fadeIn var(--transition-fast);
 }
 
+.modal-container-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1001;
+  width: 100%;
+  max-width: 420px; /* Keep container the same size as modal-content */
+}
+
+/* Layer 1: Body */
+.octopus-body {
+  position: absolute;
+  top: -130px;
+  right: 33px;
+  width: 320px;
+  max-width: none;
+  z-index: 1;
+  pointer-events: none;
+  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Layer 3: Hand */
+.octopus-hand {
+  position: absolute;
+  top: -29px; /* Adjust based on where it needs to rest on the form */
+  left: 67px; /* Adjust as needed */
+  width: 75px;
+  z-index: 3;
+  pointer-events: none;
+  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Pixelated 8-bit border utility */
+.pixelated-border {
+  border: none !important;
+  border-radius: 4px !important; /* Slightly blocky */
+  box-shadow: 
+    -3px 0 0 0 white,
+    3px 0 0 0 white,
+    0 -3px 0 0 white,
+    0 3px 0 0 white,
+    -3px -3px 0 0 var(--border-light),
+    3px -3px 0 0 var(--border-light),
+    -3px 3px 0 0 var(--border-light),
+    3px 3px 0 0 var(--border-light),
+    0 0 0 3px var(--border-light) !important;
+  /* Box shadow trick for the 8-bit aesthetic, matching default appearance somewhat */
+}
+
+/* Update Layer 2 rules */
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
@@ -30,6 +82,7 @@
   display: flex;
   flex-direction: column;
   animation: slideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 2; /* Important: keeps it between octopus layers */
 }
 
 @keyframes slideUp {
