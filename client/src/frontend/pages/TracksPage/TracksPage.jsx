@@ -4,10 +4,11 @@ import { ArrowRight, CheckCircle2, Layers, Loader2 } from "lucide-react";
 import { APP_ROUTES } from "../../../routes/paths.js";
 import { getTrackTree } from "../../../shared/learningApi.js";
 import { getCompletedExerciseIds } from "../../../shared/learningProgress.js";
+import trackHeroImage from "../../../assets/track_hero.jpg";
 import "./TracksPage.css";
 
-const HERO_BACKGROUND_IMAGE = "https://images.unsplash.com/photo-1518773553398-650c184e0bb3?auto=format&fit=crop&w=1920&q=80";
-const TRACK_IMAGE_FALLBACK = "https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=1200&q=80";
+const HERO_BACKGROUND_IMAGE = trackHeroImage;
+const TRACK_IMAGE_FALLBACK = trackHeroImage;
 
 const LANGUAGE_LABELS = Object.freeze({
   71: "Python",
@@ -176,11 +177,13 @@ export default function TracksPage() {
           backgroundImage: `linear-gradient(120deg, rgba(2, 6, 23, 0.68), rgba(2, 6, 23, 0.3)), url(${HERO_BACKGROUND_IMAGE})`,
         }}
       >
-        <div className="container tracksPage__heroInner">
-          <h1>Explore Learning Tracks</h1>
-          <p>
-            Choose a track, continue your progress, and jump back into the latest coding workspace instantly.
-          </p>
+        <div className="container">
+          <div className="tracksPage__heroInner">
+            <h1>Explore Learning Tracks</h1>
+            <p>
+              Choose a track, continue your progress, and jump back into the latest coding workspace instantly.
+            </p>
+          </div>
         </div>
       </section>
 

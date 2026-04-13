@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useAlert } from "../../../shared/Alert/AlertContext.jsx";
 import {
   BookOpen,
   ChevronDown,
@@ -124,6 +125,8 @@ export default function TrackEditorPage({ trackId, onBackToList, onEnterEditor }
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [studioExercise, setStudioExercise] = useState(null);
   const [levelTab, setLevelTab] = useState("theory");
+
+  const { addAlert } = useAlert();
 
   const trackMap = useMemo(() => {
     return new Map(tracks.map((track) => [track.id, track]));
@@ -436,14 +439,16 @@ export default function TrackEditorPage({ trackId, onBackToList, onEnterEditor }
     try {
       await updateTrack(selectedNode.trackId, {
         title: trackTitle.trim(),
-        description: trackDescription.trim() || null,
+        description: trackDescription.trim(),
         language_id: Number(trackLanguageId),
-        featured_image_url: trackFeaturedImageUrl.trim() || null,
+        featured_image_url: trackFeaturedImageUrl.trim(),
         is_published: trackIsPublished,
       });
       await loadTracks();
+      addAlert("Track saved successfully!", "success");
     } catch (err) {
       setError(err.message || "Failed to save track.");
+      addAlert(err.message || "Failed to save track.", "error");
     } finally {
       setSaving(false);
     }
@@ -497,8 +502,10 @@ export default function TrackEditorPage({ trackId, onBackToList, onEnterEditor }
     try {
       await updateSection(selectedNode.sectionId, { title: sectionTitle.trim() });
       await loadSections(selectedNode.trackId, true);
+      addAlert("Section saved successfully!", "success");
     } catch (err) {
       setError(err.message || "Failed to save section.");
+      addAlert(err.message || "Failed to save section.", "error");
     } finally {
       setSaving(false);
     }
@@ -569,8 +576,10 @@ export default function TrackEditorPage({ trackId, onBackToList, onEnterEditor }
     try {
       await updateExercise(selectedNode.exerciseId, { title: exerciseTitle.trim() });
       await loadExercises(selectedNode.sectionId, true);
+      addAlert("Exercise saved successfully!", "success");
     } catch (err) {
       setError(err.message || "Failed to save exercise.");
+      addAlert(err.message || "Failed to save exercise.", "error");
     } finally {
       setSaving(false);
     }
@@ -659,8 +668,10 @@ export default function TrackEditorPage({ trackId, onBackToList, onEnterEditor }
         test_cases: parsedTestCases,
       });
       await loadTasks(selectedNode.exerciseId, true);
+      addAlert("Level saved successfully!", "success");
     } catch (err) {
       setError(err.message || "Failed to save level.");
+      addAlert(err.message || "Failed to save level.", "error");
     } finally {
       setSaving(false);
     }

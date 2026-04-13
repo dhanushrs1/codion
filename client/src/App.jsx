@@ -9,11 +9,13 @@ import NotFoundPage from "./shared/404/NotFoundPage.jsx";
 import FrontendDashboardPage from "./frontend/FrontendDashboardPage.jsx";
 import FrontendLayout from "./frontend/layout/FrontendLayout.jsx";
 import { APP_ROUTES } from "./routes/paths.js";
+import { AlertProvider } from "./shared/Alert/AlertContext.jsx";
 
 export default function App() {
   return (
-    <Routes>
-      {/* OAuth callback — fullscreen, no header/footer */}
+    <AlertProvider>
+      <Routes>
+        {/* OAuth callback — fullscreen, no header/footer */}
       <Route path="/auth/callback" element={<OAuthCallbackPage />} />
 
       {/* Frontend Unified Layout wrapping user-facing pages */}
@@ -79,5 +81,6 @@ export default function App() {
 
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
+    </AlertProvider>
   );
 }

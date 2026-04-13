@@ -10,6 +10,10 @@
   align-items: center;
 }
 
+.tracksPage__hero .container {
+  width: 100%;
+}
+
 .tracksPage__heroInner {
   color: #e2e8f0;
   padding-top: 2rem;
@@ -99,7 +103,7 @@
 
 .tracksPage__cardMedia {
   position: relative;
-  aspect-ratio: 21 / 9;
+  aspect-ratio: 32 / 9;
   background: var(--bg-hover);
   overflow: hidden;
 }

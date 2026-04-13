@@ -589,7 +589,7 @@
 .cfm-image-preview-container {
   position: relative;
   width: 100%;
-  max-width: 600px; /* Wider for banner format */
+  max-width: 100%;
   margin: 10px auto 0;
   border-radius: var(--radius-md);
   overflow: hidden;
@@ -597,7 +597,9 @@
 }
 
 .cfm-banner-preview .cfm-image-preview {
-  aspect-ratio: 21 / 9; /* Banner ratio */
+  aspect-ratio: 32 / 9; /* Smaller in height but covers full width */
+  max-height: 240px;
+  object-position: center;
 }
 
 .cfm-image-preview {
