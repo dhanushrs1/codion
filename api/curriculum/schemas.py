@@ -1,5 +1,16 @@
 from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional, Any, Dict
+from datetime import datetime
+
+class UserTaskProgressBase(BaseModel):
+    task_id: int
+    status: str = "completed"
+
+class UserTaskProgressResponse(UserTaskProgressBase):
+    id: int
+    user_id: int
+    completed_at: datetime
+    model_config = ConfigDict(from_attributes=True)
 
 class TaskBase(BaseModel):
     instructions_md: str
@@ -33,12 +44,14 @@ class TaskStudent(BaseModel):
 
 class ExerciseBase(BaseModel):
     title: str
+    slug: Optional[str] = None
 
 class ExerciseCreate(ExerciseBase):
     order: Optional[int] = None
 
 class ExerciseUpdate(BaseModel):
     title: Optional[str] = None
+    slug: Optional[str] = None
     order: Optional[int] = None
 
 class ExerciseInDB(ExerciseBase):
@@ -63,6 +76,18 @@ class ExerciseStudent(ExerciseInDB):
 
 
 # ── Workspace (student-facing IDE page) ──────────────────────────────────
+
+class TaskEvaluateRequest(BaseModel):
+    source_code: str
+    language_id: int
+
+class TaskEvaluateResponse(BaseModel):
+    passed: bool
+    verdict: str
+    output: Optional[str] = None
+    error: Optional[str] = None
+    passed_cases: int
+    total_cases: int
 
 class ExerciseSibling(BaseModel):
     id: int
@@ -101,12 +126,14 @@ class ExerciseAdmin(ExerciseInDB):
     tasks: List[TaskInDB] = Field(default_factory=list)
 
 class SectionBase(BaseModel):
+    slug: Optional[str] = None
     title: str
 
 class SectionCreate(SectionBase):
     order: Optional[int] = None
 
 class SectionUpdate(BaseModel):
+    slug: Optional[str] = None
     title: Optional[str] = None
     order: Optional[int] = None
 
@@ -117,6 +144,7 @@ class SectionInDB(SectionBase):
     model_config = ConfigDict(from_attributes=True)
 
 class TrackBase(BaseModel):
+    slug: Optional[str] = None
     title: str
     description: Optional[str] = None
     featured_image_url: Optional[str] = None
@@ -127,6 +155,7 @@ class TrackCreate(TrackBase):
     order: Optional[int] = None
 
 class TrackUpdate(BaseModel):
+    slug: Optional[str] = None
     title: Optional[str] = None
     description: Optional[str] = None
     featured_image_url: Optional[str] = None

@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, JSON, Boolean
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, JSON, Boolean, DateTime
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 from auth.models import Base
 
 class Track(Base):
@@ -7,6 +8,7 @@ class Track(Base):
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     title = Column(String(256), nullable=False)
+    slug = Column(String(256), nullable=True)
     description = Column(Text, nullable=True)
     featured_image_url = Column(String(1024), nullable=True)
     language_id = Column(Integer, nullable=False)
@@ -21,6 +23,7 @@ class Section(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     track_id = Column(Integer, ForeignKey("tracks.id"), nullable=False)
     title = Column(String(256), nullable=False)
+    slug = Column(String(256), nullable=True)
     order = Column(Integer, nullable=False)
     
     track = relationship("Track", back_populates="sections")
@@ -31,6 +34,7 @@ class Exercise(Base):
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     section_id = Column(Integer, ForeignKey("sections.id"), nullable=False)
+    slug = Column(String(256), nullable=True)
     title = Column(String(256), nullable=False)
     order = Column(Integer, nullable=False)
     mode = Column(String(50), default="task", nullable=False)
@@ -74,3 +78,14 @@ class Task(Base):
     test_cases = Column(JSON, nullable=True)
     
     exercise = relationship("Exercise", back_populates="tasks")
+
+
+class UserTaskProgress(Base):
+    __tablename__ = "user_task_progress"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id"), nullable=False, index=True)
+    status = Column(String(50), nullable=False, default="completed")
+    completed_at = Column(DateTime(timezone=True), server_default=func.now())
+

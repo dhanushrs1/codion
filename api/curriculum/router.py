@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import httpx
+import json
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -46,7 +50,7 @@ def _token_session_version(payload: dict[str, Any]) -> int:
     return value if value > 0 else 1
 
 
-async def get_current_admin(
+async def get_current_user(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> User:
@@ -74,7 +78,14 @@ async def get_current_admin(
             detail="Session expired. Please log in again.",
         )
 
-    normalized_role = (user.role or payload.get("role") or "").strip().upper()
+    return user
+
+async def get_current_admin(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    user = await get_current_user(request, db)
+    normalized_role = (user.role or "").strip().upper()
     if normalized_role not in ELEVATED_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -215,6 +226,7 @@ async def create_track(
 
     item = models.Track(
         title=payload.title,
+        slug=payload.slug if payload.slug is not None else _slugify_stem(payload.title),
         description=payload.description,
         featured_image_url=_normalize_track_image_url(payload.featured_image_url),
         language_id=payload.language_id,
@@ -276,6 +288,8 @@ async def update_track(
 
     if payload.title is not None:
         item.title = payload.title
+    if payload.slug is not None:
+        item.slug = payload.slug
     if payload.description is not None:
         item.description = payload.description
     if payload.featured_image_url is not None:
@@ -405,7 +419,12 @@ async def create_section(
         conditions,
     )
 
-    item = models.Section(track_id=track_id, title=payload.title, order=order_value)
+    item = models.Section(
+        track_id=track_id,
+        title=payload.title,
+        slug=payload.slug if payload.slug is not None else _slugify_stem(payload.title),
+        order=order_value
+    )
     db.add(item)
     await db.commit()
     await db.refresh(item)
@@ -485,6 +504,8 @@ async def update_section(
 
     if payload.title is not None:
         item.title = payload.title
+    if payload.slug is not None:
+        item.slug = payload.slug
 
     await db.commit()
     await db.refresh(item)
@@ -555,7 +576,12 @@ async def create_exercise(
         conditions,
     )
 
-    item = models.Exercise(section_id=section_id, title=payload.title, order=order_value)
+    item = models.Exercise(
+        section_id=section_id,
+        title=payload.title,
+        slug=payload.slug if payload.slug is not None else _slugify_stem(payload.title),
+        order=order_value
+    )
     db.add(item)
     await db.commit()
     await db.refresh(item)
@@ -635,6 +661,8 @@ async def update_exercise(
 
     if payload.title is not None:
         item.title = payload.title
+    if payload.slug is not None:
+        item.slug = payload.slug
 
     await db.commit()
     await db.refresh(item)
@@ -855,17 +883,18 @@ async def list_tracks_student(
 
     return tracks
 
-@router.get("/api/tracks/{track_id}", response_model=schemas.TrackStudent)
+@router.get("/api/tracks/{track_identifier}", response_model=schemas.TrackStudent)
 async def get_track_student(
-    track_id: int,
+    track_identifier: str,
     db: AsyncSession = Depends(get_db),
 ) -> models.Track:
-    item = await db.scalar(
-        select(models.Track)
-        .options(selectinload(models.Track.sections))
-        .where(models.Track.id == track_id)
-        .where(models.Track.is_published == True)
-    )
+    statement = select(models.Track).options(selectinload(models.Track.sections)).where(models.Track.is_published == True)
+    if track_identifier.isdigit():
+        statement = statement.where(models.Track.id == int(track_identifier))
+    else:
+        statement = statement.where(models.Track.slug == track_identifier)
+        
+    item = await db.scalar(statement)
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Track not found")
 
@@ -873,16 +902,18 @@ async def get_track_student(
     return item
 
 
-@router.get("/api/exercises/{exercise_id}", response_model=schemas.ExerciseStudent)
+@router.get("/api/exercises/{exercise_identifier}", response_model=schemas.ExerciseStudent)
 async def get_exercise_student(
-    exercise_id: int,
+    exercise_identifier: str,
     db: AsyncSession = Depends(get_db),
 ) -> models.Exercise:
-    item = await db.scalar(
-        select(models.Exercise)
-        .options(selectinload(models.Exercise.tasks))
-        .where(models.Exercise.id == exercise_id)
-    )
+    statement = select(models.Exercise).options(selectinload(models.Exercise.tasks))
+    if exercise_identifier.isdigit():
+        statement = statement.where(models.Exercise.id == int(exercise_identifier))
+    else:
+        statement = statement.where(models.Exercise.slug == exercise_identifier)
+        
+    item = await db.scalar(statement)
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exercise not found")
 
@@ -890,17 +921,19 @@ async def get_exercise_student(
     return item
 
 
-@router.get("/api/exercises/{exercise_id}/workspace", response_model=schemas.ExerciseWorkspaceData)
+@router.get("/api/exercises/{exercise_identifier}/workspace", response_model=schemas.ExerciseWorkspaceData)
 async def get_exercise_workspace(
-    exercise_id: int,
+    exercise_identifier: str,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Return everything the workspace page needs in a single call."""
-    exercise = await db.scalar(
-        select(models.Exercise)
-        .options(selectinload(models.Exercise.tasks))
-        .where(models.Exercise.id == exercise_id)
-    )
+    statement = select(models.Exercise).options(selectinload(models.Exercise.tasks))
+    if exercise_identifier.isdigit():
+        statement = statement.where(models.Exercise.id == int(exercise_identifier))
+    else:
+        statement = statement.where(models.Exercise.slug == exercise_identifier)
+        
+    exercise = await db.scalar(statement)
     if not exercise:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exercise not found")
 
@@ -946,3 +979,178 @@ async def get_exercise_workspace(
     }
 
 
+JUDGE_URL = os.getenv("JUDGE_URL", "http://codion-judge:2358")
+
+@router.post("/api/exercises/{exercise_id}/tasks/{task_id}/evaluate", response_model=schemas.TaskEvaluateResponse)
+async def evaluate_task(
+    exercise_id: int,
+    task_id: int,
+    payload: schemas.TaskEvaluateRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Securely evaluates a task's source code against backend-hidden test cases."""
+    task = await db.scalar(
+        select(models.Task)
+        .where(models.Task.id == task_id)
+        .where(models.Task.exercise_id == exercise_id)
+    )
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+    test_cases_raw = task.test_cases
+    test_cases = []
+    if isinstance(test_cases_raw, str):
+        try:
+            test_cases = json.loads(test_cases_raw)
+        except json.JSONDecodeError:
+            pass
+    elif isinstance(test_cases_raw, list):
+        test_cases = test_cases_raw
+
+    if not test_cases:
+        test_cases = [{"input": "", "expected_outputs": [""], "match_mode": "normalize"}]
+
+    passed_count = 0
+    first_fail_error = None
+    first_fail_output = None
+    first_fail_verdict = None
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        for idx, tc in enumerate(test_cases):
+            # 1. Start job
+            try:
+                resp = await client.post(
+                    f"{JUDGE_URL}/submissions",
+                    json={
+                        "source_code": payload.source_code,
+                        "language_id": payload.language_id,
+                        "stdin": tc.get("input", ""),
+                    },
+                )
+                resp.raise_for_status()
+                job_id = resp.json().get("job_id")
+            except Exception as e:
+                return {"passed": False, "verdict": "Internal Error", "error": f"Failed to post to judge: {str(e)}", "passed_cases": passed_count, "total_cases": len(test_cases)}
+
+            # 2. Poll job
+            result = None
+            for _ in range(30):
+                await asyncio.sleep(0.5)
+                try:
+                    poll_resp = await client.get(f"{JUDGE_URL}/submissions/{job_id}")
+                    body = poll_resp.json()
+                    if body.get("status") == "completed" or body.get("verdict"):
+                        result = body
+                        break
+                except Exception:
+                    continue
+
+            if not result:
+                return {"passed": False, "verdict": "Time Limit Exceeded", "error": "Execution timed out.", "passed_cases": passed_count, "total_cases": len(test_cases)}
+
+            verdict = result.get("verdict")
+            output = (result.get("output") or "").strip()
+            error = result.get("error")
+
+            if verdict != "Accepted" or error:
+                first_fail_verdict = verdict if verdict else "Runtime Error"
+                first_fail_error = error
+                first_fail_output = output
+                break
+
+            # 3. Validation
+            expected_outs = tc.get("expected_outputs", [""])
+            if not expected_outs and tc.get("expected_output") is not None:
+                expected_outs = [tc.get("expected_output")]
+            match_mode = tc.get("match_mode", "normalize")
+
+            passed = False
+            for exp in expected_outs:
+                if match_mode == "exact":
+                    if output == exp:
+                        passed = True
+                        break
+                elif match_mode == "any_of":
+                    if output in expected_outs:
+                        passed = True
+                        break
+                else: # normalize
+                    if output.strip() == (exp or "").strip():
+                        passed = True
+                        break
+
+            if passed:
+                passed_count += 1
+            else:
+                first_fail_verdict = "Wrong Answer"
+                first_fail_output = output
+                break
+
+    if passed_count == len(test_cases):
+        return {
+            "passed": True,
+            "verdict": "Accepted",
+            "output": first_fail_output, # might be populated by the last run if we kept it, but maybe print last output
+            "passed_cases": passed_count,
+            "total_cases": len(test_cases)
+        }
+    else:
+        return {
+            "passed": False,
+            "verdict": first_fail_verdict or "Wrong Answer",
+            "output": first_fail_output,
+            "error": first_fail_error,
+            "passed_cases": passed_count,
+            "total_cases": len(test_cases)
+        }
+
+
+
+
+@router.post("/progress/task/{task_id}", response_model=schemas.UserTaskProgressResponse)
+async def mark_task_completed(
+    task_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    user = await get_current_user(request, db)
+    
+    # Check if task exists
+    task = await db.scalar(select(models.Task).where(models.Task.id == task_id))
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+        
+    # Check if progress already exists
+    progress = await db.scalar(
+        select(models.UserTaskProgress)
+        .where(models.UserTaskProgress.user_id == user.id)
+        .where(models.UserTaskProgress.task_id == task_id)
+    )
+    
+    if progress:
+        progress.status = "completed"
+        progress.completed_at = func.now()
+    else:
+        progress = models.UserTaskProgress(
+            user_id=user.id,
+            task_id=task_id,
+            status="completed"
+        )
+        db.add(progress)
+        
+    await db.commit()
+    await db.refresh(progress)
+    return progress
+
+@router.get("/progress/task", response_model=list[schemas.UserTaskProgressResponse])
+async def get_all_task_progress(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    user = await get_current_user(request, db)
+    
+    result = await db.execute(
+        select(models.UserTaskProgress)
+        .where(models.UserTaskProgress.user_id == user.id)
+    )
+    return result.scalars().all()

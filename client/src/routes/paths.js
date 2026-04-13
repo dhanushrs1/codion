@@ -7,8 +7,8 @@ export const APP_ROUTES = Object.freeze({
   frontendTracks: "/tracks",
   frontendTrackOverviewPattern: "/tracks/:trackSlug",
   frontendTrackOverview: (trackSlug) => `/tracks/${trackSlug}`,
-  frontendExerciseWorkspacePattern: "/workspace/:exerciseId",
-  frontendExerciseWorkspace: (exerciseId) => `/workspace/${exerciseId}`,
+  frontendExerciseWorkspacePattern: "/:trackSlug/:sectionSlug/:exerciseSlug/:taskId",
+  frontendExerciseWorkspace: (trackSlug, sectionSlug, exerciseSlug, taskId) => `/${trackSlug}/${sectionSlug}/${exerciseSlug}/${taskId}`,
 
   // Legacy frontend-prefixed slugs kept for redirects.
   frontendRoot: "/frontend",

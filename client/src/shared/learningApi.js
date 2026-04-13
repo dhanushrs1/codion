@@ -8,10 +8,11 @@ function buildHeaders() {
   };
 }
 
-async function request(endpoint) {
+async function request(endpoint, options = {}) {
   const response = await fetch(apiUrl(endpoint), {
-    method: "GET",
+    method: options.method || "GET",
     headers: buildHeaders(),
+    ...options,
   });
 
   if (!response.ok) {
@@ -39,4 +40,23 @@ export function getExerciseForLearner(exerciseId) {
 export function getExerciseWorkspace(exerciseId) {
   return request(`/api/exercises/${exerciseId}/workspace`);
 }
+
+export function evaluateTask(exerciseId, taskId, sourceCode, languageId) {
+  return request(`/api/exercises/${exerciseId}/tasks/${taskId}/evaluate`, {
+    method: "POST",
+    body: JSON.stringify({ source_code: sourceCode, language_id: languageId }),
+  });
+}
+
+export function saveTaskProgress(taskId, payload = {}) {
+  return request(`/api/progress/task/${taskId}`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getAllTaskProgress() {
+  return request("/api/progress/task");
+}
+
 

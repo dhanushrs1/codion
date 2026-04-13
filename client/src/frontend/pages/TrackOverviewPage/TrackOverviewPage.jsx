@@ -114,6 +114,25 @@ export default function TrackOverviewPage() {
     };
   }, [track, completedExerciseIds]);
 
+  const exerciseStatusMap = useMemo(() => {
+    if (!track) return {};
+    const map = {};
+    let isLocked = false;
+
+    for (const section of track.sections || []) {
+      for (const exercise of section.exercises || []) {
+        const isCompleted = completedExerciseIds.includes(Number(exercise.id));
+        map[exercise.id] = { isLocked, isCompleted };
+        
+        // If this exercise is not completed, lock all subsequent exercises
+        if (!isCompleted) {
+          isLocked = true;
+        }
+      }
+    }
+    return map;
+  }, [track, completedExerciseIds]);
+
   const firstExerciseMeta = useMemo(() => {
     if (!track) return null;
     for (const section of track.sections || []) {
@@ -131,7 +150,12 @@ export default function TrackOverviewPage() {
   function handleStartLearning() {
     if (!firstExerciseMeta) return;
 
-    navigate(APP_ROUTES.frontendExerciseWorkspace(firstExerciseMeta.exerciseId), {
+    navigate(APP_ROUTES.frontendExerciseWorkspace(
+      trackSlug,
+      slugify(firstExerciseMeta.sectionTitle),
+      slugify(firstExerciseMeta.exerciseTitle),
+      firstExerciseMeta.exerciseId
+    ), {
       state: {
         trackTitle: track.title,
         sectionTitle: firstExerciseMeta.sectionTitle,
@@ -143,7 +167,12 @@ export default function TrackOverviewPage() {
   function handleGoToExercise(exerciseId, sectionTitle, exerciseTitle) {
     if (!exerciseId) return;
     
-    navigate(APP_ROUTES.frontendExerciseWorkspace(exerciseId), {
+    navigate(APP_ROUTES.frontendExerciseWorkspace(
+      trackSlug,
+      slugify(sectionTitle),
+      slugify(exerciseTitle),
+      exerciseId
+    ), {
       state: {
         trackTitle: track.title,
         sectionTitle,
@@ -331,18 +360,23 @@ export default function TrackOverviewPage() {
                         {totalExercises > 0 ? (
                           <div className="trackOverviewPage__exerciseList">
                             {section.exercises.map((exercise, idx) => {
-                              const isCompleted = completedExerciseIds.includes(Number(exercise.id));
+                              const status = exerciseStatusMap[exercise.id] || { isLocked: false, isCompleted: false };
+                              const { isLocked, isCompleted } = status;
 
                               return (
                                 <div
                                   key={exercise.id}
-                                  className={`trackOverviewPage__exerciseCard ${isCompleted ? "is-completed" : ""}`}
+                                  className={`trackOverviewPage__exerciseCard ${isCompleted ? "is-completed" : ""} ${isLocked ? "is-locked" : ""}`}
                                   style={{ "--ex-index": idx }}
-                                  onClick={() => handleGoToExercise(exercise.id, section.title, exercise.title)}
+                                  onClick={() => {
+                                    if (!isLocked) {
+                                      handleGoToExercise(exercise.id, section.title, exercise.title);
+                                    }
+                                  }}
                                 >
                                   <div className="trackOverviewPage__exerciseCardLeft">
-                                    <div className={`trackOverviewPage__exerciseIndex trackOverviewPage__exerciseIndex--${isCompleted ? "done" : "pending"}`}>
-                                      {isCompleted ? <CheckCircle2 size={14} /> : idx + 1}
+                                    <div className={`trackOverviewPage__exerciseIndex trackOverviewPage__exerciseIndex--${isCompleted ? "done" : (isLocked ? "locked" : "pending")}`}>
+                                      {isCompleted ? <CheckCircle2 size={14} /> : (isLocked ? <LockKeyhole size={14} /> : idx + 1)}
                                     </div>
 
                                     <div className="trackOverviewPage__exerciseInfo">
@@ -356,14 +390,19 @@ export default function TrackOverviewPage() {
                                   </div>
 
                                   <button
-                                    className={`trackOverviewPage__exerciseBadge trackOverviewPage__exerciseBadge--${isCompleted ? "review" : "start"}`}
+                                    className={`trackOverviewPage__exerciseBadge trackOverviewPage__exerciseBadge--${isCompleted ? "review" : (isLocked ? "locked" : "start")}`}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleGoToExercise(exercise.id, section.title, exercise.title);
+                                      if (!isLocked) {
+                                        handleGoToExercise(exercise.id, section.title, exercise.title);
+                                      }
                                     }}
+                                    disabled={isLocked}
                                   >
                                     {isCompleted ? (
                                       <><RotateCcw size={12} /> Review</>
+                                    ) : isLocked ? (
+                                      <><LockKeyhole size={12} /> Locked</>
                                     ) : (
                                       <><Play size={12} /> Start</>
                                     )}

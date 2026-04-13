@@ -388,6 +388,17 @@
   transform: translateX(3px);
 }
 
+.trackOverviewPage__exerciseCard.is-locked {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: var(--bg-base);
+}
+
+.trackOverviewPage__exerciseCard.is-locked:hover {
+  transform: none;
+  background: var(--bg-base);
+}
+
 .trackOverviewPage__exerciseCard.is-completed {
   /* completed exercises get a subtle left accent */
   border-left: 3px solid var(--state-success);
@@ -425,6 +436,12 @@
   background: rgba(5,150,105,0.08);
   color: var(--state-success);
   border: 1.5px solid rgba(5,150,105,0.3);
+}
+
+.trackOverviewPage__exerciseIndex--locked {
+  background: var(--bg-base);
+  color: var(--text-tertiary);
+  border: 1.5px dashed var(--border-light);
 }
 
 .trackOverviewPage__exerciseInfo {
@@ -482,6 +499,13 @@
   color: var(--state-success);
   border: 1px solid rgba(5,150,105,0.2);
 }
+.trackOverviewPage__exerciseBadge--locked {
+  background: var(--bg-hover);
+  color: var(--text-tertiary);
+  border: 1px solid var(--border-light);
+  cursor: not-allowed;
+}
+
 
 .trackOverviewPage__exerciseBadge--review:hover {
   background: rgba(5,150,105,0.14);

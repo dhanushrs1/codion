@@ -1,26 +1,26 @@
 import DOMPurify from "dompurify";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Play, Square, ChevronLeft, ChevronRight, Loader2, Terminal,
-  CheckCircle, XCircle, AlertTriangle, Clock, Cpu, Send,
-  BookOpen, List, ArrowLeft,
+  CheckCircle, XCircle, AlertTriangle, Send, User,
+  List, ArrowLeft, Check, Lock,
 } from "lucide-react";
-import { apiUrl } from "../../../shared/api.js";
-import { getExerciseWorkspace } from "../../../shared/learningApi.js";
+import { getExerciseWorkspace, evaluateTask, saveTaskProgress, getAllTaskProgress } from "../../../shared/learningApi.js";
 import { APP_ROUTES } from "../../../routes/paths.js";
+import { PythonIcon, JavaIcon, CppIcon, CIcon, JSIcon, SQLIcon, TextIcon } from "../../components/LanguageIcons/LanguageIcons.jsx";
 import "./WorkspacePage.css";
 
 /* ── Language helpers ──────────────────────────────────────────────────── */
 const LANG_MAP = {
-  71:  { name: "Python",     ext: "py",   mono: "python",     icon: "🐍", starter: '# Write code below 💖\n' },
-  63:  { name: "JavaScript", ext: "js",   mono: "javascript",  icon: "⚡", starter: '// Write code below 💖\n' },
-  62:  { name: "Java",       ext: "java", mono: "java",        icon: "☕", starter: '// Write code below 💖\n' },
-  54:  { name: "C++",        ext: "cpp",  mono: "cpp",         icon: "⚙️", starter: '// Write code below 💖\n' },
-  50:  { name: "C",          ext: "c",    mono: "c",           icon: "🔧", starter: '// Write code below 💖\n' },
-  60:  { name: "Go",         ext: "go",   mono: "go",          icon: "🐹", starter: '// Write code below 💖\n' },
-  73:  { name: "Rust",       ext: "rs",   mono: "rust",        icon: "🦀", starter: '// Write code below 💖\n' },
-  74:  { name: "TypeScript", ext: "ts",   mono: "typescript",  icon: "🔷", starter: '// Write code below 💖\n' },
+  71:  { name: "Python",     ext: "py",   mono: "python",     Icon: PythonIcon, starter: '# Write code below 💖\n' },
+  63:  { name: "JavaScript", ext: "js",   mono: "javascript", Icon: JSIcon,     starter: '// Write code below 💖\n' },
+  62:  { name: "Java",       ext: "java", mono: "java",       Icon: JavaIcon,   starter: '// Write code below 💖\n' },
+  54:  { name: "C++",        ext: "cpp",  mono: "cpp",        Icon: CppIcon,    starter: '// Write code below 💖\n' },
+  50:  { name: "C",          ext: "c",    mono: "c",          Icon: CIcon,      starter: '// Write code below 💖\n' },
+  60:  { name: "Go",         ext: "go",   mono: "go",         Icon: TextIcon,   starter: '// Write code below 💖\n' },
+  73:  { name: "Rust",       ext: "rs",   mono: "rust",       Icon: TextIcon,   starter: '// Write code below 💖\n' },
+  74:  { name: "TypeScript", ext: "ts",   mono: "typescript", Icon: JSIcon,     starter: '// Write code below 💖\n' },
 };
 const DEFAULT_LANG = LANG_MAP[71];
 
@@ -30,25 +30,24 @@ function getLangInfo(languageId) {
 
 /* ── File icon component ───────────────────────────────────────────────── */
 function FileIcon({ ext }) {
-  const iconMap = {
-    py: "🐍", js: "⚡", ts: "🔷", java: "☕",
-    cpp: "⚙️", c: "🔧", go: "🐹", rs: "🦀",
-  };
-  return <span className="ws-file-icon">{iconMap[ext] || "📄"}</span>;
+  const lang = Object.values(LANG_MAP).find(l => l.ext === ext);
+  const IconComponent = lang ? lang.Icon : TextIcon;
+  return (
+    <span className="ws-file-icon">
+      <IconComponent size={16} />
+    </span>
+  );
 }
 
 /* ── Verdict helpers ───────────────────────────────────────────────────── */
 const VERDICT_META = {
-  Accepted:             { color: "#10b981", Icon: CheckCircle },
+  Accepted:             { color: "var(--state-success)", Icon: CheckCircle },
   "Wrong Answer":       { color: "#f59e0b", Icon: XCircle },
-  "Runtime Error":      { color: "#ef4444", Icon: XCircle },
-  "Compilation Error":  { color: "#ef4444", Icon: AlertTriangle },
+  "Runtime Error":      { color: "var(--state-error)", Icon: XCircle },
+  "Compilation Error":  { color: "var(--state-error)", Icon: AlertTriangle },
   "Time Limit Exceeded":{ color: "#f59e0b", Icon: AlertTriangle },
-  "Internal Error":     { color: "#ef4444", Icon: AlertTriangle },
+  "Internal Error":     { color: "var(--state-error)", Icon: AlertTriangle },
 };
-
-const POLL_INTERVAL_MS = 800;
-const MAX_POLLS = 30;
 
 /* ── Parse starter code from task ──────────────────────────────────────── */
 function parseStarterCode(task, langInfo) {
@@ -74,17 +73,28 @@ function detectJudgeLangId(filename, trackLangId) {
   return ext ? extMap[ext] : (trackLangId || 71);
 }
 
+function slugify(text) {
+  return (text || "")
+    .toLowerCase()
+    .replace(/[^\w ]+/g, "")
+    .replace(/ +/g, "-");
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    MAIN COMPONENT
    ══════════════════════════════════════════════════════════════════════════ */
 export default function WorkspacePage() {
-  const { exerciseId } = useParams();
+  const { trackSlug, sectionSlug, exerciseSlug, taskId: exerciseId } = useParams();
   const navigate = useNavigate();
 
   /* ── Data state ── */
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  /* ── Levels state ── */
+  const [activeTaskIndex, setActiveTaskIndex] = useState(0);
+  const [completedTasks, setCompletedTasks] = useState(new Set()); // Store IDs of completed tasks
 
   /* ── Editor state ── */
   const [code, setCode] = useState("");
@@ -93,9 +103,6 @@ export default function WorkspacePage() {
   /* ── Execution state ── */
   const [output, setOutput] = useState(null);
   const [running, setRunning] = useState(false);
-  const [phase, setPhase] = useState("idle");
-  const pollRef = useRef(null);
-  const pollCount = useRef(0);
 
   /* ── UI state ── */
   const [tocOpen, setTocOpen] = useState(false);
@@ -108,13 +115,37 @@ export default function WorkspacePage() {
       setLoading(true);
       setError("");
       setOutput(null);
-      setPhase("idle");
+      setActiveTaskIndex(0);
+      setCompletedTasks(new Set());
       try {
-        const payload = await getExerciseWorkspace(exerciseId);
+        const [payload, progressPayload] = await Promise.all([
+          getExerciseWorkspace(exerciseId),
+          getAllTaskProgress().catch(() => []) // gracefully handle errors
+        ]);
         if (!disposed) {
           setData(payload);
+          
+          const completedSet = new Set(
+            progressPayload
+              .filter(p => p.status === "completed")
+              .map(p => p.task_id)
+          );
+          setCompletedTasks(completedSet);
+
           const langInfo = getLangInfo(payload.language_id);
-          const task = payload.tasks?.[0];
+          const tasks = payload.tasks || [];
+          
+          // Determine the first uncompleted task
+          let initialIndex = 0;
+          for (let i = 0; i < tasks.length; i++) {
+            if (!completedSet.has(tasks[i].id)) {
+              initialIndex = i;
+              break;
+            }
+          }
+          setActiveTaskIndex(initialIndex);
+
+          const task = tasks[initialIndex];
           const parsed = parseStarterCode(task, langInfo);
           setFilename(parsed.filename);
           setCode(parsed.content);
@@ -129,75 +160,70 @@ export default function WorkspacePage() {
     return () => { disposed = true; };
   }, [exerciseId]);
 
+  /* ── Change Level ── */
+  function handleTaskSelect(idx) {
+    if (!data || !data.tasks || idx < 0 || idx >= data.tasks.length) return;
+    setActiveTaskIndex(idx);
+    const langInfo = getLangInfo(data.language_id);
+    const task = data.tasks[idx];
+    const parsed = parseStarterCode(task, langInfo);
+    setFilename(parsed.filename);
+    setCode(parsed.content);
+    setOutput(null);
+  }
+
   /* ── Derived values ── */
   const langInfo = useMemo(() => data ? getLangInfo(data.language_id) : DEFAULT_LANG, [data]);
-  const currentIndex = useMemo(() => {
+  const activeTask = data?.tasks?.[activeTaskIndex];
+  
+  // Exercise-level navigation (siblings)
+  const currentExIndex = useMemo(() => {
     if (!data) return 0;
     const idx = data.exercises_in_section.findIndex(e => e.id === data.id);
     return idx >= 0 ? idx : 0;
   }, [data]);
   const totalExercises = data?.total_exercises_in_section || 0;
-  const progress = totalExercises > 0 ? Math.round(((currentIndex + 1) / totalExercises) * 100) : 0;
-  const prevExercise = data?.exercises_in_section?.[currentIndex - 1] || null;
-  const nextExercise = data?.exercises_in_section?.[currentIndex + 1] || null;
+  const prevExercise = data?.exercises_in_section?.[currentExIndex - 1] || null;
+  const nextExercise = data?.exercises_in_section?.[currentExIndex + 1] || null;
 
-  /* ── Code execution ── */
-  function stopPolling() {
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = null;
-    pollCount.current = 0;
-  }
+  // Track progress over tasks
+  const totalTasks = data?.tasks?.length || 1;
+  const progress = Math.round((completedTasks.size / totalTasks) * 100);
 
+  /* ── Code execution (Secure) ── */
   async function runCode() {
-    if (running) return;
+    if (running || !data || !activeTask) return;
     setRunning(true);
-    setPhase("pending");
     setOutput(null);
-    stopPolling();
 
-    const langId = detectJudgeLangId(filename, data?.language_id);
-    let jobId;
+    const langId = detectJudgeLangId(filename, data.language_id);
     try {
-      const res = await fetch(apiUrl("/api/v1/judge/submissions"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source_code: code, language_id: langId }),
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.detail ?? "Submission failed");
-      jobId = d.job_id;
+      // We use our protected backend evaluate proxy which checks against hidden test cases.
+      const res = await evaluateTask(data.id, activeTask.id, code, langId);
+      setOutput(res);
     } catch (err) {
       setOutput({ error: err.message, verdict: "Internal Error" });
-      setPhase("done");
+    } finally {
       setRunning(false);
-      return;
     }
-
-    pollRef.current = setInterval(async () => {
-      pollCount.current += 1;
-      if (pollCount.current > MAX_POLLS) {
-        stopPolling();
-        setOutput({ error: "Timed out waiting for result.", verdict: "Time Limit Exceeded" });
-        setPhase("done");
-        setRunning(false);
-        return;
-      }
-      try {
-        const res = await fetch(apiUrl(`/api/v1/judge/submissions/${jobId}`));
-        const d = await res.json();
-        if (d.status === "processing") { setPhase("processing"); return; }
-        if (d.status === "completed") {
-          stopPolling();
-          setOutput(d);
-          setPhase("done");
-          setRunning(false);
-        }
-      } catch { /* keep polling */ }
-    }, POLL_INTERVAL_MS);
   }
 
   function handleSubmit() {
-    runCode(); // For now, submit = run. Can be extended with judge evaluation later.
+    if (!data || !activeTask || verdict !== "Accepted") return;
+    
+    setCompletedTasks(prev => {
+      const next = new Set(prev);
+      next.add(activeTask.id);
+      return next;
+    });
+
+    // Save progress to backend quietly
+    saveTaskProgress(activeTask.id).catch(console.error);
+
+    // Optionally auto-advance
+    if (activeTaskIndex < totalTasks - 1) {
+      handleTaskSelect(activeTaskIndex + 1);
+    }
   }
 
   /* ── Tab key in editor ── */
@@ -213,9 +239,9 @@ export default function WorkspacePage() {
   }
 
   /* ── Navigation ── */
-  function goToExercise(id) {
-    if (!id) return;
-    navigate(APP_ROUTES.frontendExerciseWorkspace(id));
+  function goToExercise(ex) {
+    if (!ex || !ex.id) return;
+    navigate(APP_ROUTES.frontendExerciseWorkspace(trackSlug, sectionSlug, slugify(ex.title), ex.id));
   }
 
   /* ── Verdict display ── */
@@ -270,8 +296,11 @@ export default function WorkspacePage() {
 
         <div className="ws-header-right">
           <span className="ws-header-exercise-badge">
-            Exercise {currentIndex + 1}/{totalExercises}
+            Level {activeTaskIndex + 1}/{totalTasks}
           </span>
+          <div className="ws-user-profile" title="User Profile">
+            <User size={18} />
+          </div>
         </div>
       </header>
 
@@ -282,53 +311,60 @@ export default function WorkspacePage() {
         <div className="ws-left-panel">
           <div className="ws-left-scrollable">
             {/* Exercise Label */}
-            <div className="ws-exercise-label">Exercise</div>
+            <div className="ws-exercise-label">{data.title}</div>
 
-            {/* Exercise Title */}
+            {/* Task/Level Title */}
             <h1 className="ws-exercise-title">
-              {String(currentIndex + 1).padStart(2, "0")}. {data.title}
+              Level {activeTaskIndex + 1}
             </h1>
 
-            {/* Theory Content */}
-            {data.theory_content && (
-              <div
-                className="ws-theory-content"
-                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(data.theory_content) }}
-              />
-            )}
-
-            {/* If no theory_content, show task instructions instead */}
-            {!data.theory_content && data.tasks?.[0]?.instructions_md && (
-              <div
-                className="ws-theory-content"
-                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(data.tasks[0].instructions_md) }}
-              />
-            )}
+            {/* Content: Prefer task instructions, fallback to exercise theory if missing */}
+            <div
+              className="ws-theory-content"
+              dangerouslySetInnerHTML={{ 
+                __html: DOMPurify.sanitize(activeTask?.instructions_md || data.theory_content || "") 
+              }}
+            />
           </div>
 
-          {/* Table of Contents Toggle */}
+          {/* Table of Contents Toggle (Levels) */}
           <div className="ws-toc-section">
             <button
               className="ws-toc-toggle"
               onClick={() => setTocOpen(v => !v)}
             >
               <List size={14} />
-              <span>Table of Contents</span>
+              <span>Exercise Levels</span>
               <ChevronRight size={14} className={`ws-toc-chevron ${tocOpen ? "is-open" : ""}`} />
             </button>
 
             {tocOpen && (
               <div className="ws-toc-list">
-                {data.exercises_in_section.map((ex, idx) => (
-                  <button
-                    key={ex.id}
-                    className={`ws-toc-item ${ex.id === data.id ? "is-active" : ""}`}
-                    onClick={() => goToExercise(ex.id)}
-                  >
-                    <span className="ws-toc-num">{String(idx + 1).padStart(2, "0")}</span>
-                    <span className="ws-toc-name">{ex.title}</span>
-                  </button>
-                ))}
+                {data.tasks.map((task, idx) => {
+                  const isCompleted = completedTasks.has(task.id);
+                  const isActive = idx === activeTaskIndex;
+                  // Unlock logic: 
+                  // The first task is always available (idx === 0). 
+                  // A task is unlocked if the immediate previous task is completed.
+                  const previousTaskCompleted = idx === 0 || completedTasks.has(data.tasks[idx - 1].id);
+                  const isLocked = !isCompleted && !previousTaskCompleted;
+
+                  return (
+                    <button
+                      key={task.id}
+                      className={`ws-toc-item ${isActive ? "is-active" : ""} ${isCompleted ? "is-completed" : ""} ${isLocked ? "is-locked" : ""}`}
+                      onClick={() => !isLocked && handleTaskSelect(idx)}
+                      disabled={isLocked}
+                      title={isLocked ? "Complete previous level to unlock" : ""}
+                    >
+                      <span className="ws-toc-num">
+                        {isCompleted ? <Check size={12} className="ws-check-icon" /> : 
+                         isLocked ? <Lock size={12} /> : String(idx + 1).padStart(2, "0")}
+                      </span>
+                      <span className="ws-toc-name">Level {idx + 1}</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -366,29 +402,25 @@ export default function WorkspacePage() {
           {/* Editor Toolbar */}
           <div className="ws-editor-toolbar">
             <div className="ws-toolbar-icons">
-              {/* Decorative icons like in Codédex */}
-              <span className="ws-deco-icon" title="Chat">💬</span>
-              <span className="ws-deco-icon" title="Screenshot">📸</span>
-              <span className="ws-deco-icon" title="Hint">💡</span>
-              <span className="ws-deco-icon" title="Help">🤖</span>
-              <span className="ws-deco-icon" title="Share">🎨</span>
+              {/* Optional decorators */}
             </div>
             <div className="ws-toolbar-actions">
               <button
-                className="ws-run-btn"
+                className="btn ws-run-btn"
                 onClick={runCode}
                 disabled={running}
               >
                 {running ? <Square size={13} /> : <Play size={13} />}
-                {running ? "Running" : "Run"}
+                {running ? "Checking…" : "Run & Check"}
               </button>
               <button
-                className="ws-submit-btn"
+                className="btn ws-submit-btn"
                 onClick={handleSubmit}
-                disabled={running}
+                disabled={running || verdict !== "Accepted"}
+                title={verdict === "Accepted" ? "Submit and continue" : "Pass all checks to submit"}
               >
                 <Send size={13} />
-                Submit answer
+                Submit
               </button>
             </div>
           </div>
@@ -397,7 +429,7 @@ export default function WorkspacePage() {
           <div className="ws-terminal">
             <div className="ws-terminal-header">
               <Terminal size={13} />
-              <span>Terminal</span>
+              <span>Terminal Output</span>
               {verdict && vm.Icon && (
                 <span className="ws-terminal-verdict" style={{ color: vm.color }}>
                   <vm.Icon size={12} /> {verdict}
@@ -405,35 +437,36 @@ export default function WorkspacePage() {
               )}
             </div>
             <div className="ws-terminal-body">
-              {phase === "idle" && !output && (
+              {!running && !output && (
                 <div className="ws-terminal-placeholder">
-                  <div className="ws-terminal-placeholder-icon">✦</div>
-                  <p>Click <strong>Run</strong> to view your results</p>
+                  <div className="ws-terminal-placeholder-icon">✧</div>
+                  <p>Click <strong>Run & Check</strong> to evaluate against test cases.</p>
                 </div>
               )}
 
-              {(phase === "pending" || phase === "processing") && (
+              {running && (
                 <div className="ws-terminal-running">
-                  <Loader2 size={20} className="ws-spin" />
-                  <p>{phase === "pending" ? "Queuing job…" : "Executing…"}</p>
+                  <Loader2 size={18} className="ws-spin" />
+                  <p>Running code over all test cases…</p>
                 </div>
               )}
 
-              {phase === "done" && output && (
+              {!running && output && (
                 <div className="ws-terminal-result">
+                  {output.passed_cases !== undefined && (
+                    <div className="ws-terminal-cases-meta">
+                      Passed {output.passed_cases} out of {output.total_cases} test cases.
+                    </div>
+                  )}
+
                   {output.output && (
                     <pre className="ws-terminal-stdout">{output.output}</pre>
                   )}
-                  {(output.error || (!output.output && !output.error)) && (
-                    <pre className="ws-terminal-stderr">
-                      {output.error ?? "No output produced."}
-                    </pre>
+                  {output.error && (
+                    <pre className="ws-terminal-stderr">{output.error}</pre>
                   )}
-                  {output.time && (
-                    <div className="ws-terminal-meta">
-                      <span><Clock size={11} /> {output.time}s</span>
-                      {output.memory && <span><Cpu size={11} /> {(output.memory / 1024).toFixed(1)} MB</span>}
-                    </div>
+                  {!output.output && !output.error && !output.passed && (
+                     <pre className="ws-terminal-stderr">Check your logic. Output did not match expected hidden test case.</pre>
                   )}
                 </div>
               )}
@@ -442,30 +475,32 @@ export default function WorkspacePage() {
         </div>
       </div>
 
-      {/* ═══════════ BOTTOM FOOTER BAR ═══════════ */}
+      {/* ═══════════ BOTTOM FOOTER BAR (Exercise Navigation) ═══════════ */}
       <footer className="ws-footer">
         <div className="ws-footer-left">
           <span className="ws-footer-level">{data.section_title}</span>
           <span className="ws-footer-exercise-info">
-            Exercise {currentIndex + 1} / {totalExercises}
+            Exercise {currentExIndex + 1} / {totalExercises}
           </span>
-          <span className="ws-footer-xp">10 XP</span>
         </div>
         <div className="ws-footer-right">
           <button
-            className="ws-nav-btn ws-nav-back"
-            onClick={() => goToExercise(prevExercise?.id)}
+            className="btn btn-ghost ws-nav-btn ws-nav-back"
+            onClick={() => goToExercise(prevExercise)}
             disabled={!prevExercise}
           >
             <ChevronLeft size={14} />
             Back
           </button>
+          
           <button
-            className="ws-nav-btn ws-nav-next"
-            onClick={() => goToExercise(nextExercise?.id)}
-            disabled={!nextExercise}
+            className="btn btn-brand ws-nav-btn ws-nav-next"
+            onClick={() => goToExercise(nextExercise)}
+            disabled={!nextExercise || progress < 100}
+            title={progress < 100 ? "Complete all levels to unlock" : ""}
           >
-            Next
+            {progress < 100 && <Lock size={12} style={{ marginRight: '6px' }} />}
+            Next Exercise
             <ChevronRight size={14} />
           </button>
         </div>
