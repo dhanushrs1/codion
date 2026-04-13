@@ -95,11 +95,11 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
 }
 
-.tracksPage__card:hover {
+/* .tracksPage__card:hover {
   transform: translateY(-4px);
   box-shadow: 0 16px 32px rgba(0, 0, 0, 0.08);
   border-color: var(--border-light);
-}
+} */
 
 .tracksPage__cardMedia {
   position: relative;
@@ -116,9 +116,9 @@
   transition: transform 0.5s ease;
 }
 
-.tracksPage__card:hover .tracksPage__cardMedia img {
+/* .tracksPage__card:hover .tracksPage__cardMedia img {
   transform: scale(1.04);
-}
+} */
 
 .tracksPage__cardLanguage {
   position: absolute;

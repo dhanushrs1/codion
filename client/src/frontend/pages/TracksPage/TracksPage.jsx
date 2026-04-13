@@ -240,9 +240,9 @@ export default function TracksPage() {
                             )}
                           </div>
                         </div>
-                        <span className={`tracksPage__progressLabel ${isComplete ? "is-complete" : ""}`}>
+                        {/* <span className={`tracksPage__progressLabel ${isComplete ? "is-complete" : ""}`}>
                           {isComplete ? "Completed" : "In Progress"}
-                        </span>
+                        </span> */}
                       </div>
                     </div>
 

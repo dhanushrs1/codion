@@ -1012,7 +1012,7 @@ async def evaluate_task(
 
     passed_count = 0
     first_fail_error = None
-    first_fail_output = None
+    last_output = None
     first_fail_verdict = None
 
     async with httpx.AsyncClient(timeout=15.0) as client:
@@ -1052,10 +1052,15 @@ async def evaluate_task(
             output = (result.get("output") or "").strip()
             error = result.get("error")
 
+            if error:
+                import re
+                error = re.sub(r'File "/tmp/[^/]+/[^"]+"', 'File "main.py"', error)
+
+            last_output = output
+
             if verdict != "Accepted" or error:
                 first_fail_verdict = verdict if verdict else "Runtime Error"
                 first_fail_error = error
-                first_fail_output = output
                 break
 
             # 3. Validation
@@ -1083,14 +1088,13 @@ async def evaluate_task(
                 passed_count += 1
             else:
                 first_fail_verdict = "Wrong Answer"
-                first_fail_output = output
                 break
 
     if passed_count == len(test_cases):
         return {
             "passed": True,
             "verdict": "Accepted",
-            "output": first_fail_output, # might be populated by the last run if we kept it, but maybe print last output
+            "output": last_output,
             "passed_cases": passed_count,
             "total_cases": len(test_cases)
         }
@@ -1098,7 +1102,7 @@ async def evaluate_task(
         return {
             "passed": False,
             "verdict": first_fail_verdict or "Wrong Answer",
-            "output": first_fail_output,
+            "output": last_output,
             "error": first_fail_error,
             "passed_cases": passed_count,
             "total_cases": len(test_cases)

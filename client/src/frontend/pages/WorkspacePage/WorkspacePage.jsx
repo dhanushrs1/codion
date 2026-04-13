@@ -201,6 +201,7 @@ export default function WorkspacePage() {
   function handleTaskSelect(idx) {
     if (!data || !data.tasks || idx < 0 || idx >= data.tasks.length) return;
     setActiveTaskIndex(idx);
+    setShowEmptyWarning(false);
     const langInfo = getLangInfo(data.language_id);
     const task = data.tasks[idx];
     const parsed = parseStarterCode(task, langInfo);
@@ -257,6 +258,11 @@ export default function WorkspacePage() {
       // We use our protected backend evaluate proxy which checks against hidden test cases.
       const res = await evaluateTask(data.id, activeTask.id, code, langId);
       setOutput(res);
+
+      if (res.verdict === "Accepted") {
+        setWarningMsg("Well done! Let's solve the next level.");
+        setShowEmptyWarning(true);
+      }
     } catch (err) {
       setOutput({ error: err.message, verdict: "Internal Error" });
     } finally {
@@ -266,6 +272,8 @@ export default function WorkspacePage() {
 
   function handleSubmit() {
     if (!data || !activeTask || verdict !== "Accepted") return;
+    
+    setShowEmptyWarning(false);
     
     setCompletedTasks(prev => {
       const next = new Set(prev);
@@ -382,7 +390,7 @@ export default function WorkspacePage() {
         Please rotate your device to horizontal to use the Code Workspace. Desktop experience is highly recommended.
       </div>
       
-      {/* ════ POPUP EMPTY CODE WARNING ════ */}
+      {/* ════ POPUP CODE WARNING / SUCCESS ════ */}
       <div className={`ws-empty-warning-popup ${showEmptyWarning ? 'is-visible' : ''}`}>
         <div className="ws-empty-warning-character">
           <img 
@@ -394,7 +402,17 @@ export default function WorkspacePage() {
           />
         </div>
         <div className="ws-empty-warning-bubble">
-          <p><strong>Hey there!</strong> {warningMsg}</p>
+          <p><strong>{verdict === "Accepted" ? "Awesome!" : "Hey there!"}</strong> {warningMsg}</p>
+          {verdict === "Accepted" && (
+            <button 
+              className="btn btn-brand" 
+              onClick={handleSubmit}
+              style={{ marginTop: '10px', fontSize: '0.85rem', padding: '6px 12px' }}
+            >
+              <Check size={14} style={{ marginRight: '6px' }} /> 
+              Next Level
+            </button>
+          )}
         </div>
       </div>
       {/* ═══════════ TOP HEADER BAR ═══════════ */}
@@ -571,15 +589,6 @@ export default function WorkspacePage() {
                 {running ? <Square size={13} /> : <Play size={13} />}
                 {running ? "Checking…" : "Run & Check"}
               </button>
-              <button
-                className="btn ws-submit-btn"
-                onClick={handleSubmit}
-                disabled={running || verdict !== "Accepted"}
-                title={verdict === "Accepted" ? "Submit and continue" : "Pass all checks to submit"}
-              >
-                <Send size={13} />
-                Submit
-              </button>
             </div>
           </div>
 
@@ -611,13 +620,13 @@ export default function WorkspacePage() {
 
               {!running && output && (
                 <div className="ws-terminal-result">
-                  {verdict && (
+                  {verdict !== "Accepted" && verdict && (
                     <div className="ws-terminal-verdict-large" style={{ color: vm.color, fontWeight: '700', fontSize: '1.2rem', marginBottom: '8px' }}>
                       {verdict}
                     </div>
                   )}
-                  {output.passed_cases !== undefined && (
-                    <div className="ws-terminal-cases-meta" style={{ marginBottom: '12px', color: 'var(--text-secondary)', fontWeight: '600' }}>
+                  {verdict !== "Accepted" && output.passed_cases !== undefined && (
+                    <div className="ws-terminal-cases-meta">
                       Passed {output.passed_cases} out of {output.total_cases} test cases.
                     </div>
                   )}
