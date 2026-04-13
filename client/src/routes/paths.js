@@ -5,6 +5,8 @@ export const APP_ROUTES = Object.freeze({
   // Clean user-facing slugs.
   frontendDashboard: "/dashboard",
   frontendTracks: "/tracks",
+  frontendTrackOverviewPattern: "/tracks/:trackSlug",
+  frontendTrackOverview: (trackSlug) => `/tracks/${trackSlug}`,
   frontendWorkspace: "/workspace",
   frontendExerciseWorkspacePattern: "/workspace/:exerciseId",
   frontendExerciseWorkspace: (exerciseId) => `/workspace/${exerciseId}`,

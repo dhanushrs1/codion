@@ -154,19 +154,16 @@ export default function TracksPage() {
     });
   }, [completedExerciseIds, tracks]);
 
-  function openTrackWorkspace(track) {
-    const meta = track.firstExerciseMeta;
-    if (!meta?.exerciseId) {
-      return;
-    }
+  function slugify(text) {
+    return (text || "")
+      .toLowerCase()
+      .replace(/[^\w ]+/g, "")
+      .replace(/ +/g, "-");
+  }
 
-    navigate(APP_ROUTES.frontendExerciseWorkspace(meta.exerciseId), {
-      state: {
-        trackTitle: track.title,
-        sectionTitle: meta.sectionTitle,
-        exerciseTitle: meta.exerciseTitle,
-      },
-    });
+  function openTrackWorkspace(track) {
+    if (!track.title) return;
+    navigate(APP_ROUTES.frontendTrackOverview(slugify(track.title)));
   }
 
   return (
@@ -253,9 +250,8 @@ export default function TracksPage() {
                       type="button"
                       className="btn btn-brand tracksPage__cta"
                       onClick={() => openTrackWorkspace(track)}
-                      disabled={!track.firstExerciseMeta?.exerciseId}
                     >
-                      {track.firstExerciseMeta?.exerciseId ? "Continue Track" : "No Exercises Yet"}
+                      View Track
                       <ArrowRight size={14} />
                     </button>
                   </div>

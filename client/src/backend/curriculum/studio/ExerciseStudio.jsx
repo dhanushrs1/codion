@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   ArrowLeft,
   Save,
@@ -37,6 +37,10 @@ import Editor from "@monaco-editor/react";
 import { getTasks, bulkSaveTasks, deleteTask } from "../../../shared/curriculumApi.js";
 import { apiUrl } from "../../../shared/api.js";
 import "./ExerciseStudio.css";
+
+import ReactQuill from "react-quill";
+import "react-quill/dist/quill.snow.css";
+import MediaPickerModal from "../../media/components/MediaPickerModal.jsx";
 
 //      Helpers                                                                   
 
@@ -135,49 +139,92 @@ function SortableLevelItem({ task, index, isActive, onClick, onDelete, canDelete
 //      Theory Tab                                                                
 
 function TheoryTab({ value, onChange }) {
-  const [preview, setPreview] = useState(false);
+  const quillRef = useRef(null);
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
 
-  // Very simple markdown  †’ HTML (no external lib needed)
-  function renderMarkdown(md) {
-    const escaped = md
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-    return escaped
-      .replace(/^### (.+)$/gm, "<h3>$1</h3>")
-      .replace(/^## (.+)$/gm, "<h2>$1</h2>")
-      .replace(/^# (.+)$/gm, "<h1>$1</h1>")
-      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-      .replace(/\*(.+?)\*/g, "<em>$1</em>")
-      .replace(/`(.+?)`/g, "<code>$1</code>")
-      .replace(/\n/g, "<br />");
+  const modules = useMemo(
+    () => ({
+      toolbar: {
+        container: [
+          [{ header: [1, 2, 3, false] }],
+          ["bold", "italic", "underline", "strike", "blockquote", "code-block"],
+          [{ color: [] }, { background: [] }],
+          [{ align: [] }],
+          [{ list: "ordered" }, { list: "bullet" }],
+          ["link", "image"],
+          ["clean"],
+        ],
+        handlers: {
+          image: function () {
+            setShowMediaPicker(true);
+          },
+        },
+      },
+    }),
+    []
+  );
+
+  function handleMediaSelect(item) {
+    if (item && item.url) {
+      const editor = quillRef.current.getEditor();
+      const range = editor.getSelection() ?? { index: editor.getLength() };
+      editor.insertEmbed(range.index, "image", item.url);
+      editor.setSelection(range.index + 1);
+    }
+    setShowMediaPicker(false);
+  }
+
+  function handleInsertHint() {
+    const editor = quillRef.current.getEditor();
+    const range = editor.getSelection() ?? { index: editor.getLength() };
+    editor.clipboard.dangerouslyPasteHTML(
+      range.index,
+      `<div class="cfm-hint-box" style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px;margin-bottom:12px;border-radius:4px;">&#128161; <strong>Hint:</strong> Provide your hint here...</div><p><br/></p>`
+    );
+  }
+
+  function handleInsertRepo() {
+    const url = prompt("Enter GitHub Repository Link:");
+    if (url) {
+      const editor = quillRef.current.getEditor();
+      const range = editor.getSelection() ?? { index: editor.getLength() };
+      editor.clipboard.dangerouslyPasteHTML(
+        range.index,
+        `<div class="cfm-repo-box" style="background:#f1f5f9;border-left:4px solid #475569;padding:12px;margin-bottom:12px;border-radius:4px;">&#128230; <strong>Reference Repo:</strong> <a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a></div><p><br/></p>`
+      );
+    }
   }
 
   return (
     <div className="es-theory">
       <div className="es-theory-toolbar">
-        <span className="es-theory-hint">Supports Markdown</span>
-        <button
-          className="es-preview-toggle"
-          onClick={() => setPreview((p) => !p)}
-          title={preview ? "Back to editor" : "Preview"}
-        >
-          {preview ? <EyeOff size={14} /> : <Eye size={14} />}
-          {preview ? "Edit" : "Preview"}
-        </button>
+        <span className="es-theory-hint">Advanced Rich Text Editor</span>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button type="button" className="es-preview-toggle" onClick={handleInsertHint}>
+            + Hint Box
+          </button>
+          <button type="button" className="es-preview-toggle" onClick={handleInsertRepo}>
+            + Repo Box
+          </button>
+        </div>
       </div>
-      {preview ? (
-        <div
-          className="es-theory-preview"
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(value) }}
-        />
-      ) : (
-        <textarea
-          className="es-theory-editor"
+
+      <div className="es-theory-quill-wrapper">
+        <ReactQuill
+          ref={quillRef}
+          theme="snow"
           value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="# Level Title&#10;&#10;Write your theory and instructions here using Markdown..."
-          spellCheck={false}
+          onChange={(html) => onChange(html)}
+          modules={modules}
+          placeholder="Write your level theory and instructions here..."
+        />
+      </div>
+
+      {showMediaPicker && (
+        <MediaPickerModal
+          isOpen={showMediaPicker}
+          onClose={() => setShowMediaPicker(false)}
+          onSelect={handleMediaSelect}
         />
       )}
     </div>

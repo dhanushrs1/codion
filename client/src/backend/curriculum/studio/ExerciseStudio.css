@@ -416,6 +416,61 @@
   color: var(--text-primary);
 }
 
+.es-theory-quill-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.es-theory-quill-wrapper .quill {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.es-theory-quill-wrapper .ql-container {
+  flex: 1;
+  overflow-y: auto;
+  font-family: inherit;
+  font-size: 1rem;
+  background: var(--bg-surface);
+  border: none !important;
+}
+
+.es-theory-quill-wrapper .ql-toolbar {
+  border: none !important;
+  border-bottom: 1px solid var(--border-light) !important;
+  background: var(--bg-card);
+}
+
+.es-theory-quill-wrapper .ql-editor {
+  padding: 1.5rem;
+}
+
+/* Global rich text styles inside Quill editor */
+.ql-editor img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+  display: block;
+  margin: 10px 0;
+}
+.ql-editor .cfm-hint-box {
+  background: #fef3c7;
+  border-left: 4px solid #f59e0b;
+  padding: 12px;
+  margin-bottom: 12px;
+  border-radius: 4px;
+}
+.ql-editor .cfm-repo-box {
+  background: #f1f5f9;
+  border-left: 4px solid #475569;
+  padding: 12px;
+  margin-bottom: 12px;
+  border-radius: 4px;
+}
+
 .es-theory-editor {
   flex: 1;
   resize: none;

@@ -24,7 +24,7 @@
 }
 
 .cfm-track-card__img {
-  height: 156px;
+  aspect-ratio: 32/9;
   background-color: var(--bg-subtle);
   display: flex;
   align-items: center;

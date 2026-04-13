@@ -227,6 +227,32 @@ async def create_track(
     return item
 
 
+@router.put("/api/admin/tracks/reorder")
+async def reorder_tracks(
+    payload: schemas.ReorderRequest,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_admin),
+) -> dict[str, str]:
+    _validate_unique_ids(payload.item_ids)
+
+    total_tracks = int((await db.scalar(select(func.count()).select_from(models.Track))) or 0)
+    if total_tracks != len(payload.item_ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="item_ids must include all tracks.",
+        )
+
+    found_ids = (await db.scalars(select(models.Track.id).where(models.Track.id.in_(payload.item_ids)))).all()
+    if len(found_ids) != len(payload.item_ids):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more tracks were not found.")
+
+    for index, item_id in enumerate(payload.item_ids, start=1):
+        await db.execute(update(models.Track).where(models.Track.id == item_id).values(order=index))
+
+    await db.commit()
+    return {"message": "Tracks reordered"}
+
+
 @router.put("/api/admin/tracks/{track_id}", response_model=schemas.TrackInDB)
 async def update_track(
     track_id: int,
@@ -283,32 +309,6 @@ async def delete_track(
     await _close_sequence_gap(db, models.Track, models.Track.order, removed_order, [])
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.put("/api/admin/tracks/reorder")
-async def reorder_tracks(
-    payload: schemas.ReorderRequest,
-    db: AsyncSession = Depends(get_db),
-    _admin: User = Depends(get_current_admin),
-) -> dict[str, str]:
-    _validate_unique_ids(payload.item_ids)
-
-    total_tracks = int((await db.scalar(select(func.count()).select_from(models.Track))) or 0)
-    if total_tracks != len(payload.item_ids):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="item_ids must include all tracks.",
-        )
-
-    found_ids = (await db.scalars(select(models.Track.id).where(models.Track.id.in_(payload.item_ids)))).all()
-    if len(found_ids) != len(payload.item_ids):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more tracks were not found.")
-
-    for index, item_id in enumerate(payload.item_ids, start=1):
-        await db.execute(update(models.Track).where(models.Track.id == item_id).values(order=index))
-
-    await db.commit()
-    return {"message": "Tracks reordered"}
 
 
 @router.post("/api/admin/uploads/track-featured-image")
@@ -412,6 +412,55 @@ async def create_section(
     return item
 
 
+@router.put("/api/admin/sections/reorder")
+async def reorder_sections(
+    payload: schemas.ReorderRequest,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_admin),
+) -> dict[str, str]:
+    _validate_unique_ids(payload.item_ids)
+
+    rows = (
+        await db.execute(
+            select(models.Section.id, models.Section.track_id)
+            .where(models.Section.id.in_(payload.item_ids))
+        )
+    ).all()
+
+    if len(rows) != len(payload.item_ids):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more sections were not found.")
+
+    track_ids = {row.track_id for row in rows}
+    if len(track_ids) != 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Sections must belong to the same track.",
+        )
+
+    track_id = next(iter(track_ids))
+    sibling_count = int(
+        (
+            await db.scalar(
+                select(func.count())
+                .select_from(models.Section)
+                .where(models.Section.track_id == track_id)
+            )
+        )
+        or 0
+    )
+    if sibling_count != len(payload.item_ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="item_ids must include all sections in the selected track.",
+        )
+
+    for index, item_id in enumerate(payload.item_ids, start=1):
+        await db.execute(update(models.Section).where(models.Section.id == item_id).values(order=index))
+
+    await db.commit()
+    return {"message": "Sections reordered"}
+
+
 @router.put("/api/admin/sections/{section_id}", response_model=schemas.SectionInDB)
 async def update_section(
     section_id: int,
@@ -470,55 +519,6 @@ async def delete_section(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.put("/api/admin/sections/reorder")
-async def reorder_sections(
-    payload: schemas.ReorderRequest,
-    db: AsyncSession = Depends(get_db),
-    _admin: User = Depends(get_current_admin),
-) -> dict[str, str]:
-    _validate_unique_ids(payload.item_ids)
-
-    rows = (
-        await db.execute(
-            select(models.Section.id, models.Section.track_id)
-            .where(models.Section.id.in_(payload.item_ids))
-        )
-    ).all()
-
-    if len(rows) != len(payload.item_ids):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more sections were not found.")
-
-    track_ids = {row.track_id for row in rows}
-    if len(track_ids) != 1:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Sections must belong to the same track.",
-        )
-
-    track_id = next(iter(track_ids))
-    sibling_count = int(
-        (
-            await db.scalar(
-                select(func.count())
-                .select_from(models.Section)
-                .where(models.Section.track_id == track_id)
-            )
-        )
-        or 0
-    )
-    if sibling_count != len(payload.item_ids):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="item_ids must include all sections in the selected track.",
-        )
-
-    for index, item_id in enumerate(payload.item_ids, start=1):
-        await db.execute(update(models.Section).where(models.Section.id == item_id).values(order=index))
-
-    await db.commit()
-    return {"message": "Sections reordered"}
-
-
 # ADMIN: EXERCISES
 
 @router.get("/api/admin/sections/{section_id}/exercises", response_model=list[schemas.ExerciseInDB])
@@ -560,6 +560,55 @@ async def create_exercise(
     await db.commit()
     await db.refresh(item)
     return item
+
+
+@router.put("/api/admin/exercises/reorder")
+async def reorder_exercises(
+    payload: schemas.ReorderRequest,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_admin),
+) -> dict[str, str]:
+    _validate_unique_ids(payload.item_ids)
+
+    rows = (
+        await db.execute(
+            select(models.Exercise.id, models.Exercise.section_id)
+            .where(models.Exercise.id.in_(payload.item_ids))
+        )
+    ).all()
+
+    if len(rows) != len(payload.item_ids):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more exercises were not found.")
+
+    section_ids = {row.section_id for row in rows}
+    if len(section_ids) != 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Exercises must belong to the same section.",
+        )
+
+    section_id = next(iter(section_ids))
+    sibling_count = int(
+        (
+            await db.scalar(
+                select(func.count())
+                .select_from(models.Exercise)
+                .where(models.Exercise.section_id == section_id)
+            )
+        )
+        or 0
+    )
+    if sibling_count != len(payload.item_ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="item_ids must include all exercises in the selected section.",
+        )
+
+    for index, item_id in enumerate(payload.item_ids, start=1):
+        await db.execute(update(models.Exercise).where(models.Exercise.id == item_id).values(order=index))
+
+    await db.commit()
+    return {"message": "Exercises reordered"}
 
 
 @router.put("/api/admin/exercises/{exercise_id}", response_model=schemas.ExerciseInDB)
@@ -620,55 +669,6 @@ async def delete_exercise(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.put("/api/admin/exercises/reorder")
-async def reorder_exercises(
-    payload: schemas.ReorderRequest,
-    db: AsyncSession = Depends(get_db),
-    _admin: User = Depends(get_current_admin),
-) -> dict[str, str]:
-    _validate_unique_ids(payload.item_ids)
-
-    rows = (
-        await db.execute(
-            select(models.Exercise.id, models.Exercise.section_id)
-            .where(models.Exercise.id.in_(payload.item_ids))
-        )
-    ).all()
-
-    if len(rows) != len(payload.item_ids):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more exercises were not found.")
-
-    section_ids = {row.section_id for row in rows}
-    if len(section_ids) != 1:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Exercises must belong to the same section.",
-        )
-
-    section_id = next(iter(section_ids))
-    sibling_count = int(
-        (
-            await db.scalar(
-                select(func.count())
-                .select_from(models.Exercise)
-                .where(models.Exercise.section_id == section_id)
-            )
-        )
-        or 0
-    )
-    if sibling_count != len(payload.item_ids):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="item_ids must include all exercises in the selected section.",
-        )
-
-    for index, item_id in enumerate(payload.item_ids, start=1):
-        await db.execute(update(models.Exercise).where(models.Exercise.id == item_id).values(order=index))
-
-    await db.commit()
-    return {"message": "Exercises reordered"}
-
-
 # ADMIN: TASKS
 
 @router.get("/api/admin/exercises/{exercise_id}/tasks", response_model=list[schemas.TaskInDB])
@@ -717,6 +717,55 @@ async def create_task(
     await db.commit()
     await db.refresh(item)
     return item
+
+
+@router.put("/api/admin/tasks/reorder")
+async def reorder_tasks(
+    payload: schemas.ReorderRequest,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_admin),
+) -> dict[str, str]:
+    _validate_unique_ids(payload.item_ids)
+
+    rows = (
+        await db.execute(
+            select(models.Task.id, models.Task.exercise_id)
+            .where(models.Task.id.in_(payload.item_ids))
+        )
+    ).all()
+
+    if len(rows) != len(payload.item_ids):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more tasks were not found.")
+
+    exercise_ids = {row.exercise_id for row in rows}
+    if len(exercise_ids) != 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tasks must belong to the same exercise.",
+        )
+
+    exercise_id = next(iter(exercise_ids))
+    sibling_count = int(
+        (
+            await db.scalar(
+                select(func.count())
+                .select_from(models.Task)
+                .where(models.Task.exercise_id == exercise_id)
+            )
+        )
+        or 0
+    )
+    if sibling_count != len(payload.item_ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="item_ids must include all tasks in the selected exercise.",
+        )
+
+    for index, item_id in enumerate(payload.item_ids, start=1):
+        await db.execute(update(models.Task).where(models.Task.id == item_id).values(step_number=index))
+
+    await db.commit()
+    return {"message": "Tasks reordered"}
 
 
 @router.put("/api/admin/tasks/{task_id}", response_model=schemas.TaskInDB)
@@ -781,55 +830,6 @@ async def delete_task(
     )
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.put("/api/admin/tasks/reorder")
-async def reorder_tasks(
-    payload: schemas.ReorderRequest,
-    db: AsyncSession = Depends(get_db),
-    _admin: User = Depends(get_current_admin),
-) -> dict[str, str]:
-    _validate_unique_ids(payload.item_ids)
-
-    rows = (
-        await db.execute(
-            select(models.Task.id, models.Task.exercise_id)
-            .where(models.Task.id.in_(payload.item_ids))
-        )
-    ).all()
-
-    if len(rows) != len(payload.item_ids):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more tasks were not found.")
-
-    exercise_ids = {row.exercise_id for row in rows}
-    if len(exercise_ids) != 1:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Tasks must belong to the same exercise.",
-        )
-
-    exercise_id = next(iter(exercise_ids))
-    sibling_count = int(
-        (
-            await db.scalar(
-                select(func.count())
-                .select_from(models.Task)
-                .where(models.Task.exercise_id == exercise_id)
-            )
-        )
-        or 0
-    )
-    if sibling_count != len(payload.item_ids):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="item_ids must include all tasks in the selected exercise.",
-        )
-
-    for index, item_id in enumerate(payload.item_ids, start=1):
-        await db.execute(update(models.Task).where(models.Task.id == item_id).values(step_number=index))
-
-    await db.commit()
-    return {"message": "Tasks reordered"}
 
 
 # STUDENT ENDPOINTS

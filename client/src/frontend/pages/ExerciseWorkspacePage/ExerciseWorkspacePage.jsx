@@ -1,3 +1,4 @@
+import DOMPurify from "dompurify";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
@@ -275,7 +276,10 @@ export default function ExerciseWorkspacePage() {
                   <h3>
                     <Rocket size={15} /> Prompt
                   </h3>
-                  <p>{activeLevel.prompt}</p>
+                  <div
+                    className="exerciseWorkspacePage__promptHtml"
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(activeLevel.prompt) }}
+                  />
                 </section>
 
                 <section className="exerciseWorkspacePage__block">
