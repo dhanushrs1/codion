@@ -5,7 +5,6 @@ import OAuthCallbackPage from "./frontend/pages/OAuthCallbackPage/OAuthCallbackP
 import WorkspacePage from "./frontend/pages/WorkspacePage/WorkspacePage.jsx";
 import TracksPage from "./frontend/pages/TracksPage/TracksPage.jsx";
 import TrackOverviewPage from "./frontend/pages/TrackOverviewPage/TrackOverviewPage.jsx";
-import ExerciseWorkspacePage from "./frontend/pages/ExerciseWorkspacePage/ExerciseWorkspacePage.jsx";
 import NotFoundPage from "./shared/404/NotFoundPage.jsx";
 import FrontendDashboardPage from "./frontend/FrontendDashboardPage.jsx";
 import FrontendLayout from "./frontend/layout/FrontendLayout.jsx";
@@ -18,6 +17,9 @@ export default function App() {
       <Routes>
         {/* OAuth callback — fullscreen, no header/footer */}
       <Route path="/auth/callback" element={<OAuthCallbackPage />} />
+
+      {/* Workspace — fullscreen IDE, no header/footer */}
+      <Route path={APP_ROUTES.frontendExerciseWorkspacePattern} element={<WorkspacePage />} />
 
       {/* Frontend Unified Layout wrapping user-facing pages */}
       <Route element={<FrontendLayout />}>
@@ -37,13 +39,15 @@ export default function App() {
         />
         <Route
           path={APP_ROUTES.frontendWorkspaceLegacy}
-          element={<Navigate to={APP_ROUTES.frontendWorkspace} replace />}
+          element={<Navigate to={APP_ROUTES.frontendTracks} replace />}
+        />
+        <Route
+          path={APP_ROUTES.frontendWorkspaceRedirect}
+          element={<Navigate to={APP_ROUTES.frontendTracks} replace />}
         />
         <Route path={APP_ROUTES.frontendDashboard} element={<FrontendDashboardPage />} />
         <Route path={APP_ROUTES.frontendTracks} element={<TracksPage />} />
         <Route path={APP_ROUTES.frontendTrackOverviewPattern} element={<TrackOverviewPage />} />
-        <Route path={APP_ROUTES.frontendWorkspace} element={<WorkspacePage />} />
-        <Route path={APP_ROUTES.frontendExerciseWorkspacePattern} element={<ExerciseWorkspacePage />} />
       </Route>
 
       {/* Admin Panel remains isolated without global header/footer */}

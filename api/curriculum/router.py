@@ -889,3 +889,60 @@ async def get_exercise_student(
     item.tasks.sort(key=lambda task: int(task.step_number or 0))
     return item
 
+
+@router.get("/api/exercises/{exercise_id}/workspace", response_model=schemas.ExerciseWorkspaceData)
+async def get_exercise_workspace(
+    exercise_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Return everything the workspace page needs in a single call."""
+    exercise = await db.scalar(
+        select(models.Exercise)
+        .options(selectinload(models.Exercise.tasks))
+        .where(models.Exercise.id == exercise_id)
+    )
+    if not exercise:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exercise not found")
+
+    section = await db.scalar(
+        select(models.Section).where(models.Section.id == exercise.section_id)
+    )
+    if not section:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Section not found")
+
+    track = await db.scalar(
+        select(models.Track).where(models.Track.id == section.track_id)
+    )
+    if not track:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Track not found")
+
+    # Sibling exercises in the same section (for Table of Contents + Back/Next)
+    siblings_rows = await db.scalars(
+        select(models.Exercise)
+        .where(models.Exercise.section_id == section.id)
+        .order_by(models.Exercise.order)
+    )
+    siblings = list(siblings_rows.all())
+
+    exercise.tasks.sort(key=lambda task: int(task.step_number or 0))
+
+    return {
+        "id": exercise.id,
+        "title": exercise.title,
+        "mode": exercise.mode,
+        "theory_content": exercise.theory_content,
+        "order": exercise.order,
+        "tasks": exercise.tasks,
+        "section_id": section.id,
+        "section_title": section.title,
+        "track_id": track.id,
+        "track_title": track.title,
+        "language_id": track.language_id,
+        "exercises_in_section": [
+            {"id": s.id, "title": s.title, "order": s.order}
+            for s in siblings
+        ],
+        "total_exercises_in_section": len(siblings),
+    }
+
+

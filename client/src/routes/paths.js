@@ -7,7 +7,6 @@ export const APP_ROUTES = Object.freeze({
   frontendTracks: "/tracks",
   frontendTrackOverviewPattern: "/tracks/:trackSlug",
   frontendTrackOverview: (trackSlug) => `/tracks/${trackSlug}`,
-  frontendWorkspace: "/workspace",
   frontendExerciseWorkspacePattern: "/workspace/:exerciseId",
   frontendExerciseWorkspace: (exerciseId) => `/workspace/${exerciseId}`,
 
@@ -16,6 +15,7 @@ export const APP_ROUTES = Object.freeze({
   frontendDashboardLegacy: "/frontend/dashboard",
   frontendTracksLegacy: "/frontend/tracks",
   frontendWorkspaceLegacy: "/frontend/workspace",
+  frontendWorkspaceRedirect: "/workspace",
 
   // Admin routes (query-driven canonical pattern).
   adminRoot: "/admin",

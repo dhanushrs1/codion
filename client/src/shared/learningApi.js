@@ -35,3 +35,8 @@ export function getTrackTree() {
 export function getExerciseForLearner(exerciseId) {
   return request(`/api/exercises/${exerciseId}`);
 }
+
+export function getExerciseWorkspace(exerciseId) {
+  return request(`/api/exercises/${exerciseId}/workspace`);
+}
+

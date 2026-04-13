@@ -45,6 +45,8 @@ class ExerciseInDB(ExerciseBase):
     id: int
     section_id: int
     order: int
+    mode: Optional[str] = "task"
+    theory_content: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -58,6 +60,42 @@ class SectionStudentWithExercises(BaseModel):
 
 class ExerciseStudent(ExerciseInDB):
     tasks: List[TaskStudent] = Field(default_factory=list)
+
+
+# ── Workspace (student-facing IDE page) ──────────────────────────────────
+
+class ExerciseSibling(BaseModel):
+    id: int
+    title: str
+    order: int
+    model_config = ConfigDict(from_attributes=True)
+
+class ExerciseWorkspaceData(BaseModel):
+    """All data the workspace page needs in a single response."""
+    # Exercise core
+    id: int
+    title: str
+    mode: Optional[str] = "task"
+    theory_content: Optional[str] = None
+    order: int
+
+    # Tasks / levels
+    tasks: List[TaskStudent] = Field(default_factory=list)
+
+    # Section context
+    section_id: int
+    section_title: str
+
+    # Track context
+    track_id: int
+    track_title: str
+    language_id: int
+
+    # Sibling exercises in same section (for ToC + Back/Next)
+    exercises_in_section: List[ExerciseSibling] = Field(default_factory=list)
+    total_exercises_in_section: int = 0
+
+    model_config = ConfigDict(from_attributes=True)
 
 class ExerciseAdmin(ExerciseInDB):
     tasks: List[TaskInDB] = Field(default_factory=list)

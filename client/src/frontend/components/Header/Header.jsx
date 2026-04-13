@@ -277,7 +277,7 @@ export default function Header({
                         Profile
                       </Link>
                       <Link
-                        to={APP_ROUTES.frontendWorkspace}
+                        to={APP_ROUTES.frontendDashboard}
                         className="nav-profile-item"
                         onClick={closeProfileMenu}
                       >

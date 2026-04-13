@@ -1,47 +1,147 @@
-import { useState, useRef } from "react";
+import DOMPurify from "dompurify";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import {
-  Play, Square, ChevronDown, Clock, Cpu,
-  CheckCircle, XCircle, AlertTriangle, Loader2, Terminal,
+  Play, Square, ChevronLeft, ChevronRight, Loader2, Terminal,
+  CheckCircle, XCircle, AlertTriangle, Clock, Cpu, Send,
+  BookOpen, List, ArrowLeft,
 } from "lucide-react";
 import { apiUrl } from "../../../shared/api.js";
+import { getExerciseWorkspace } from "../../../shared/learningApi.js";
+import { APP_ROUTES } from "../../../routes/paths.js";
 import "./WorkspacePage.css";
 
-/* ── Language map ────────────────────────────────────────────────────────── */
-const LANGUAGES = [
-  { id: 71, name: "Python 3",    ext: "py",  mono: "python",     starter: 'print("Hello, Codion!")' },
-  { id: 63, name: "JavaScript",  ext: "js",  mono: "javascript",  starter: 'console.log("Hello, Codion!");' },
-  { id: 54, name: "C++",         ext: "cpp", mono: "cpp",         starter: '#include <iostream>\nusing namespace std;\nint main() {\n    cout << "Hello, Codion!" << endl;\n    return 0;\n}' },
-  { id: 50, name: "C",           ext: "c",   mono: "c",           starter: '#include <stdio.h>\nint main() {\n    printf("Hello, Codion!\\n");\n    return 0;\n}' },
-  { id: 62, name: "Java",        ext: "java",mono: "java",        starter: 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, Codion!");\n    }\n}' },
-  { id: 60, name: "Go",          ext: "go",  mono: "go",          starter: 'package main\nimport "fmt"\nfunc main() {\n    fmt.Println("Hello, Codion!")\n}' },
-  { id: 73, name: "Rust",        ext: "rs",  mono: "rust",        starter: 'fn main() {\n    println!("Hello, Codion!");\n}' },
-];
+/* ── Language helpers ──────────────────────────────────────────────────── */
+const LANG_MAP = {
+  71:  { name: "Python",     ext: "py",   mono: "python",     icon: "🐍", starter: '# Write code below 💖\n' },
+  63:  { name: "JavaScript", ext: "js",   mono: "javascript",  icon: "⚡", starter: '// Write code below 💖\n' },
+  62:  { name: "Java",       ext: "java", mono: "java",        icon: "☕", starter: '// Write code below 💖\n' },
+  54:  { name: "C++",        ext: "cpp",  mono: "cpp",         icon: "⚙️", starter: '// Write code below 💖\n' },
+  50:  { name: "C",          ext: "c",    mono: "c",           icon: "🔧", starter: '// Write code below 💖\n' },
+  60:  { name: "Go",         ext: "go",   mono: "go",          icon: "🐹", starter: '// Write code below 💖\n' },
+  73:  { name: "Rust",       ext: "rs",   mono: "rust",        icon: "🦀", starter: '// Write code below 💖\n' },
+  74:  { name: "TypeScript", ext: "ts",   mono: "typescript",  icon: "🔷", starter: '// Write code below 💖\n' },
+};
+const DEFAULT_LANG = LANG_MAP[71];
 
-/* ── Verdict helpers ─────────────────────────────────────────────────────── */
+function getLangInfo(languageId) {
+  return LANG_MAP[languageId] || DEFAULT_LANG;
+}
+
+/* ── File icon component ───────────────────────────────────────────────── */
+function FileIcon({ ext }) {
+  const iconMap = {
+    py: "🐍", js: "⚡", ts: "🔷", java: "☕",
+    cpp: "⚙️", c: "🔧", go: "🐹", rs: "🦀",
+  };
+  return <span className="ws-file-icon">{iconMap[ext] || "📄"}</span>;
+}
+
+/* ── Verdict helpers ───────────────────────────────────────────────────── */
 const VERDICT_META = {
-  Accepted:           { color: "var(--state-success)", Icon: CheckCircle },
-  "Wrong Answer":     { color: "var(--state-warn)",    Icon: XCircle },
-  "Runtime Error":    { color: "var(--state-error)",   Icon: XCircle },
-  "Compilation Error":{ color: "var(--state-error)",   Icon: AlertTriangle },
-  "Time Limit Exceeded":{ color: "var(--state-warn)", Icon: AlertTriangle },
-  "Internal Error":   { color: "var(--state-error)",   Icon: AlertTriangle },
+  Accepted:             { color: "#10b981", Icon: CheckCircle },
+  "Wrong Answer":       { color: "#f59e0b", Icon: XCircle },
+  "Runtime Error":      { color: "#ef4444", Icon: XCircle },
+  "Compilation Error":  { color: "#ef4444", Icon: AlertTriangle },
+  "Time Limit Exceeded":{ color: "#f59e0b", Icon: AlertTriangle },
+  "Internal Error":     { color: "#ef4444", Icon: AlertTriangle },
 };
 
 const POLL_INTERVAL_MS = 800;
-const MAX_POLLS = 30; // 24-second max wait
+const MAX_POLLS = 30;
 
+/* ── Parse starter code from task ──────────────────────────────────────── */
+function parseStarterCode(task, langInfo) {
+  if (!task?.starter_code) return { filename: `script.${langInfo.ext}`, content: langInfo.starter };
+  
+  try {
+    const files = JSON.parse(task.starter_code);
+    if (Array.isArray(files) && files.length > 0) {
+      const mainFile = files.find(f => f.is_main) || files[0];
+      return { filename: mainFile.filename, content: mainFile.content || "" };
+    }
+  } catch {
+    // starter_code is plain text, not JSON
+    return { filename: `script.${langInfo.ext}`, content: task.starter_code };
+  }
+  return { filename: `script.${langInfo.ext}`, content: langInfo.starter };
+}
+
+/* ── Detect judge language ID from file extension ──────────────────────── */
+function detectJudgeLangId(filename, trackLangId) {
+  const extMap = { ".py": 71, ".js": 63, ".ts": 74, ".java": 62, ".cpp": 54, ".c": 50, ".go": 60, ".rs": 73 };
+  const ext = Object.keys(extMap).find(e => filename.endsWith(e));
+  return ext ? extMap[ext] : (trackLangId || 71);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MAIN COMPONENT
+   ══════════════════════════════════════════════════════════════════════════ */
 export default function WorkspacePage() {
-  const [langIdx, setLangIdx] = useState(0);
-  const [code, setCode]       = useState(LANGUAGES[0].starter);
-  const [output, setOutput]   = useState(null);
+  const { exerciseId } = useParams();
+  const navigate = useNavigate();
+
+  /* ── Data state ── */
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  /* ── Editor state ── */
+  const [code, setCode] = useState("");
+  const [filename, setFilename] = useState("script.py");
+
+  /* ── Execution state ── */
+  const [output, setOutput] = useState(null);
   const [running, setRunning] = useState(false);
-  const [phase, setPhase]     = useState("idle"); // idle | pending | processing | done
-  const [showLangMenu, setShowLangMenu] = useState(false);
+  const [phase, setPhase] = useState("idle");
   const pollRef = useRef(null);
   const pollCount = useRef(0);
 
-  const lang = LANGUAGES[langIdx];
+  /* ── UI state ── */
+  const [tocOpen, setTocOpen] = useState(false);
 
+  /* ── Load exercise data ── */
+  useEffect(() => {
+    let disposed = false;
+    async function load() {
+      if (!exerciseId) { setLoading(false); setError("Missing exercise id."); return; }
+      setLoading(true);
+      setError("");
+      setOutput(null);
+      setPhase("idle");
+      try {
+        const payload = await getExerciseWorkspace(exerciseId);
+        if (!disposed) {
+          setData(payload);
+          const langInfo = getLangInfo(payload.language_id);
+          const task = payload.tasks?.[0];
+          const parsed = parseStarterCode(task, langInfo);
+          setFilename(parsed.filename);
+          setCode(parsed.content);
+        }
+      } catch (err) {
+        if (!disposed) setError(err.message || "Unable to load workspace.");
+      } finally {
+        if (!disposed) setLoading(false);
+      }
+    }
+    load();
+    return () => { disposed = true; };
+  }, [exerciseId]);
+
+  /* ── Derived values ── */
+  const langInfo = useMemo(() => data ? getLangInfo(data.language_id) : DEFAULT_LANG, [data]);
+  const currentIndex = useMemo(() => {
+    if (!data) return 0;
+    const idx = data.exercises_in_section.findIndex(e => e.id === data.id);
+    return idx >= 0 ? idx : 0;
+  }, [data]);
+  const totalExercises = data?.total_exercises_in_section || 0;
+  const progress = totalExercises > 0 ? Math.round(((currentIndex + 1) / totalExercises) * 100) : 0;
+  const prevExercise = data?.exercises_in_section?.[currentIndex - 1] || null;
+  const nextExercise = data?.exercises_in_section?.[currentIndex + 1] || null;
+
+  /* ── Code execution ── */
   function stopPolling() {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = null;
@@ -55,17 +155,17 @@ export default function WorkspacePage() {
     setOutput(null);
     stopPolling();
 
-    /* ── Step 1: POST to Python API (middleman) → enqueue job ── */
+    const langId = detectJudgeLangId(filename, data?.language_id);
     let jobId;
     try {
       const res = await fetch(apiUrl("/api/v1/judge/submissions"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source_code: code, language_id: lang.id }),
+        body: JSON.stringify({ source_code: code, language_id: langId }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? "Submission failed");
-      jobId = data.job_id;
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.detail ?? "Submission failed");
+      jobId = d.job_id;
     } catch (err) {
       setOutput({ error: err.message, verdict: "Internal Error" });
       setPhase("done");
@@ -73,7 +173,6 @@ export default function WorkspacePage() {
       return;
     }
 
-    /* ── Step 2: Poll GET through Python API until job completes ── */
     pollRef.current = setInterval(async () => {
       pollCount.current += 1;
       if (pollCount.current > MAX_POLLS) {
@@ -83,32 +182,25 @@ export default function WorkspacePage() {
         setRunning(false);
         return;
       }
-
       try {
         const res = await fetch(apiUrl(`/api/v1/judge/submissions/${jobId}`));
-        const data = await res.json();
-
-        if (data.status === "processing") { setPhase("processing"); return; }
-        if (data.status === "completed") {
+        const d = await res.json();
+        if (d.status === "processing") { setPhase("processing"); return; }
+        if (d.status === "completed") {
           stopPolling();
-          setOutput(data);
+          setOutput(d);
           setPhase("done");
           setRunning(false);
         }
-      } catch {
-        // transient error — keep polling
-      }
+      } catch { /* keep polling */ }
     }, POLL_INTERVAL_MS);
   }
 
-  function handleLangChange(idx) {
-    setLangIdx(idx);
-    setCode(LANGUAGES[idx].starter);
-    setOutput(null);
-    setPhase("idle");
-    setShowLangMenu(false);
+  function handleSubmit() {
+    runCode(); // For now, submit = run. Can be extended with judge evaluation later.
   }
 
+  /* ── Tab key in editor ── */
   function handleTabKey(e) {
     if (e.key !== "Tab") return;
     e.preventDefault();
@@ -120,29 +212,121 @@ export default function WorkspacePage() {
     });
   }
 
+  /* ── Navigation ── */
+  function goToExercise(id) {
+    if (!id) return;
+    navigate(APP_ROUTES.frontendExerciseWorkspace(id));
+  }
+
+  /* ── Verdict display ── */
   const verdict = output?.verdict;
   const vm = VERDICT_META[verdict] ?? {};
 
+  /* ══ LOADING STATE ══ */
+  if (loading) {
+    return (
+      <div className="ws-root ws-loading-screen">
+        <Loader2 size={32} className="ws-spin" />
+        <p>Loading workspace…</p>
+      </div>
+    );
+  }
+
+  /* ══ ERROR STATE ══ */
+  if (error || !data) {
+    return (
+      <div className="ws-root ws-error-screen">
+        <p>{error || "Exercise not found."}</p>
+        <button className="ws-back-link" onClick={() => navigate(APP_ROUTES.frontendTracks)}>
+          <ArrowLeft size={14} /> Back to Tracks
+        </button>
+      </div>
+    );
+  }
+
+  const fileExt = filename.split(".").pop() || langInfo.ext;
+
   return (
     <div className="ws-root">
-      {/* ── Toolbar ── */}
-      <div className="ws-toolbar">
-        <div className="ws-toolbar-left">
-          {/* Language selector */}
-          <div className="ws-lang-select" onClick={() => setShowLangMenu(v => !v)}>
-            <span className="ws-lang-dot" data-lang={lang.mono} />
-            <span className="ws-lang-name">{lang.name}</span>
-            <ChevronDown size={14} />
-            {showLangMenu && (
-              <div className="ws-lang-menu">
-                {LANGUAGES.map((l, i) => (
+      {/* ═══════════ TOP HEADER BAR ═══════════ */}
+      <header className="ws-header">
+        <div className="ws-header-left">
+          <button className="ws-header-back" onClick={() => navigate(APP_ROUTES.frontendTracks)} title="Back to tracks">
+            <ArrowLeft size={16} />
+          </button>
+          <div className="ws-header-breadcrumb">
+            <span className="ws-header-track">{data.track_title}</span>
+            <ChevronRight size={12} className="ws-header-sep" />
+            <span className="ws-header-section">{data.section_title}</span>
+          </div>
+        </div>
+
+        <div className="ws-header-center">
+          <div className="ws-progress-bar">
+            <div className="ws-progress-fill" style={{ width: `${progress}%` }} />
+          </div>
+          <span className="ws-progress-text">{progress}%</span>
+        </div>
+
+        <div className="ws-header-right">
+          <span className="ws-header-exercise-badge">
+            Exercise {currentIndex + 1}/{totalExercises}
+          </span>
+        </div>
+      </header>
+
+      {/* ═══════════ MAIN BODY ═══════════ */}
+      <div className="ws-body">
+
+        {/* ─── LEFT PANEL: Theory + Table of Contents ─── */}
+        <div className="ws-left-panel">
+          <div className="ws-left-scrollable">
+            {/* Exercise Label */}
+            <div className="ws-exercise-label">Exercise</div>
+
+            {/* Exercise Title */}
+            <h1 className="ws-exercise-title">
+              {String(currentIndex + 1).padStart(2, "0")}. {data.title}
+            </h1>
+
+            {/* Theory Content */}
+            {data.theory_content && (
+              <div
+                className="ws-theory-content"
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(data.theory_content) }}
+              />
+            )}
+
+            {/* If no theory_content, show task instructions instead */}
+            {!data.theory_content && data.tasks?.[0]?.instructions_md && (
+              <div
+                className="ws-theory-content"
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(data.tasks[0].instructions_md) }}
+              />
+            )}
+          </div>
+
+          {/* Table of Contents Toggle */}
+          <div className="ws-toc-section">
+            <button
+              className="ws-toc-toggle"
+              onClick={() => setTocOpen(v => !v)}
+            >
+              <List size={14} />
+              <span>Table of Contents</span>
+              <ChevronRight size={14} className={`ws-toc-chevron ${tocOpen ? "is-open" : ""}`} />
+            </button>
+
+            {tocOpen && (
+              <div className="ws-toc-list">
+                {data.exercises_in_section.map((ex, idx) => (
                   <button
-                    key={l.id}
-                    className={`ws-lang-option${i === langIdx ? " active" : ""}`}
-                    onClick={e => { e.stopPropagation(); handleLangChange(i); }}
+                    key={ex.id}
+                    className={`ws-toc-item ${ex.id === data.id ? "is-active" : ""}`}
+                    onClick={() => goToExercise(ex.id)}
                   >
-                    <span className="ws-lang-dot" data-lang={l.mono} />
-                    {l.name}
+                    <span className="ws-toc-num">{String(idx + 1).padStart(2, "0")}</span>
+                    <span className="ws-toc-name">{ex.title}</span>
                   </button>
                 ))}
               </div>
@@ -150,30 +334,18 @@ export default function WorkspacePage() {
           </div>
         </div>
 
-        <div className="ws-toolbar-right">
-          {running && (
-            <span className="ws-phase-badge">
-              {phase === "pending" && <><Loader2 size={12} className="ws-spin" /> Queuing…</>}
-              {phase === "processing" && <><Loader2 size={12} className="ws-spin" /> Running…</>}
-            </span>
-          )}
-          <button className="btn btn-brand ws-run-btn" onClick={runCode} disabled={running}>
-            {running ? <Square size={14} /> : <Play size={14} />}
-            {running ? "Running" : "Run Code"}
-          </button>
-        </div>
-      </div>
-
-      {/* ── Editor + Output Split ── */}
-      <div className="ws-body">
-        {/* Editor panel */}
-        <div className="ws-editor-panel">
-          <div className="ws-panel-header">
-            <span>Editor</span>
-            <span className="ws-filename">solution.{lang.ext}</span>
+        {/* ─── RIGHT PANEL: Code Editor + Terminal ─── */}
+        <div className="ws-right-panel">
+          {/* File Tab */}
+          <div className="ws-file-tabs">
+            <div className="ws-file-tab is-active">
+              <FileIcon ext={fileExt} />
+              <span>{filename}</span>
+            </div>
           </div>
-          <div className="ws-editor-wrap">
-            {/* Line numbers */}
+
+          {/* Code Editor */}
+          <div className="ws-editor-area">
             <div className="ws-line-nums" aria-hidden="true">
               {code.split("\n").map((_, i) => (
                 <span key={i}>{i + 1}</span>
@@ -190,58 +362,114 @@ export default function WorkspacePage() {
               autoCapitalize="off"
             />
           </div>
-        </div>
 
-        {/* Output panel */}
-        <div className="ws-output-panel">
-          <div className="ws-panel-header">
-            <Terminal size={14} />
-            <span>Output</span>
-            {verdict && vm.Icon && (
-              <span className="ws-verdict" style={{ color: vm.color }}>
-                <vm.Icon size={13} /> {verdict}
-              </span>
-            )}
+          {/* Editor Toolbar */}
+          <div className="ws-editor-toolbar">
+            <div className="ws-toolbar-icons">
+              {/* Decorative icons like in Codédex */}
+              <span className="ws-deco-icon" title="Chat">💬</span>
+              <span className="ws-deco-icon" title="Screenshot">📸</span>
+              <span className="ws-deco-icon" title="Hint">💡</span>
+              <span className="ws-deco-icon" title="Help">🤖</span>
+              <span className="ws-deco-icon" title="Share">🎨</span>
+            </div>
+            <div className="ws-toolbar-actions">
+              <button
+                className="ws-run-btn"
+                onClick={runCode}
+                disabled={running}
+              >
+                {running ? <Square size={13} /> : <Play size={13} />}
+                {running ? "Running" : "Run"}
+              </button>
+              <button
+                className="ws-submit-btn"
+                onClick={handleSubmit}
+                disabled={running}
+              >
+                <Send size={13} />
+                Submit answer
+              </button>
+            </div>
           </div>
 
-          <div className="ws-output-body">
-            {phase === "idle" && !output && (
-              <p className="ws-placeholder">Click <strong>Run Code</strong> to execute your program.</p>
-            )}
+          {/* Terminal */}
+          <div className="ws-terminal">
+            <div className="ws-terminal-header">
+              <Terminal size={13} />
+              <span>Terminal</span>
+              {verdict && vm.Icon && (
+                <span className="ws-terminal-verdict" style={{ color: vm.color }}>
+                  <vm.Icon size={12} /> {verdict}
+                </span>
+              )}
+            </div>
+            <div className="ws-terminal-body">
+              {phase === "idle" && !output && (
+                <div className="ws-terminal-placeholder">
+                  <div className="ws-terminal-placeholder-icon">✦</div>
+                  <p>Click <strong>Run</strong> to view your results</p>
+                </div>
+              )}
 
-            {(phase === "pending" || phase === "processing") && (
-              <div className="ws-running-state">
-                <Loader2 size={28} className="ws-spin-lg" />
-                <p>{phase === "pending" ? "Job queued — waiting for executor…" : "Executing code in sandbox…"}</p>
-              </div>
-            )}
+              {(phase === "pending" || phase === "processing") && (
+                <div className="ws-terminal-running">
+                  <Loader2 size={20} className="ws-spin" />
+                  <p>{phase === "pending" ? "Queuing job…" : "Executing…"}</p>
+                </div>
+              )}
 
-            {phase === "done" && output && (
-              <>
-                {/* stdout */}
-                {output.output && (
-                  <pre className="ws-output-pre ws-stdout">{output.output}</pre>
-                )}
-
-                {/* stderr / error */}
-                {(output.error || (!output.output && !output.error)) && (
-                  <pre className="ws-output-pre ws-stderr">
-                    {output.error ?? "No output produced."}
-                  </pre>
-                )}
-
-                {/* Metadata row */}
-                {output.time && (
-                  <div className="ws-meta-row">
-                    <span><Clock size={12} /> {output.time}s</span>
-                    {output.memory && <span><Cpu size={12} /> {(output.memory / 1024).toFixed(1)} MB</span>}
-                  </div>
-                )}
-              </>
-            )}
+              {phase === "done" && output && (
+                <div className="ws-terminal-result">
+                  {output.output && (
+                    <pre className="ws-terminal-stdout">{output.output}</pre>
+                  )}
+                  {(output.error || (!output.output && !output.error)) && (
+                    <pre className="ws-terminal-stderr">
+                      {output.error ?? "No output produced."}
+                    </pre>
+                  )}
+                  {output.time && (
+                    <div className="ws-terminal-meta">
+                      <span><Clock size={11} /> {output.time}s</span>
+                      {output.memory && <span><Cpu size={11} /> {(output.memory / 1024).toFixed(1)} MB</span>}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
+
+      {/* ═══════════ BOTTOM FOOTER BAR ═══════════ */}
+      <footer className="ws-footer">
+        <div className="ws-footer-left">
+          <span className="ws-footer-level">{data.section_title}</span>
+          <span className="ws-footer-exercise-info">
+            Exercise {currentIndex + 1} / {totalExercises}
+          </span>
+          <span className="ws-footer-xp">10 XP</span>
+        </div>
+        <div className="ws-footer-right">
+          <button
+            className="ws-nav-btn ws-nav-back"
+            onClick={() => goToExercise(prevExercise?.id)}
+            disabled={!prevExercise}
+          >
+            <ChevronLeft size={14} />
+            Back
+          </button>
+          <button
+            className="ws-nav-btn ws-nav-next"
+            onClick={() => goToExercise(nextExercise?.id)}
+            disabled={!nextExercise}
+          >
+            Next
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      </footer>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Clock, LayoutList, ChevronDown, LockKeyhole } from "lucide-react";
+import { Clock, LayoutList, ChevronDown, LockKeyhole, CheckCircle2, Play, RotateCcw, MessageCircle } from "lucide-react";
 import { getTrackTree } from "../../../shared/learningApi.js";
 import { getCompletedExerciseIds } from "../../../shared/learningProgress.js";
 import { APP_ROUTES } from "../../../routes/paths.js";
@@ -141,7 +141,7 @@ export default function TrackOverviewPage() {
   }
 
   function handleGoToExercise(exerciseId, sectionTitle, exerciseTitle) {
-    if (!exerciseId || stats.completedExercises === 0) return; // Keep locked if no previous access mechanism desired, actually just link directly
+    if (!exerciseId) return;
     
     navigate(APP_ROUTES.frontendExerciseWorkspace(exerciseId), {
       state: {
@@ -164,15 +164,6 @@ export default function TrackOverviewPage() {
     });
   }
 
-  function openSection(sectionId) {
-    setExpandedSections((prev) => ({
-      ...prev,
-      [sectionId]: true,
-    }));
-
-    scrollSectionIntoView(sectionId);
-  }
-
   function toggleSection(sectionId) {
     const currentlyExpanded = expandedSections[sectionId] !== false;
     const nextExpanded = !currentlyExpanded;
@@ -185,6 +176,20 @@ export default function TrackOverviewPage() {
     if (nextExpanded) {
       scrollSectionIntoView(sectionId);
     }
+  }
+
+  // Determine chapter node state
+  function getChapterState(section) {
+    const exercises = section.exercises || [];
+    if (exercises.length === 0) return "default";
+
+    const completedCount = exercises.filter((ex) =>
+      completedExerciseIds.includes(Number(ex.id))
+    ).length;
+
+    if (completedCount >= exercises.length) return "completed";
+    if (completedCount > 0) return "progress";
+    return "default";
   }
 
   if (loading) {
@@ -202,7 +207,7 @@ export default function TrackOverviewPage() {
       <div className="trackOverviewPage trackOverviewPage--error">
         <div className="container">
           <p>{error || "Track not found."}</p>
-          <button className="btn btn-secondary" onClick={() => navigate(APP_ROUTES.frontendTracks)}>
+          <button className="btn btn-ghost" onClick={() => navigate(APP_ROUTES.frontendTracks)}>
             Back to Tracks
           </button>
         </div>
@@ -212,11 +217,11 @@ export default function TrackOverviewPage() {
 
   return (
     <div className="trackOverviewPage">
-      {/* Hero Section Banner */}
+      {/* ═══════════════════ HERO SECTION ═══════════════════ */}
       <section 
         className="trackOverviewPage__hero"
         style={{
-          backgroundImage: `linear-gradient(to bottom, rgba(2,6,23,0.5), rgba(2,6,23,0.8)), url(${track.featured_image_url || TRACK_IMAGE_FALLBACK})`
+          backgroundImage: `linear-gradient(to bottom, rgba(2,6,23,0.55), rgba(7,89,133,0.45)), url(${track.featured_image_url || TRACK_IMAGE_FALLBACK})`
         }}
       >
         <div className="container">
@@ -227,7 +232,7 @@ export default function TrackOverviewPage() {
             </p>
 
             <button 
-              className="btn btn-brand trackOverviewPage__cta action-cta" 
+              className="trackOverviewPage__cta" 
               onClick={handleStartLearning}
               disabled={!firstExerciseMeta}
             >
@@ -235,43 +240,31 @@ export default function TrackOverviewPage() {
             </button>
 
             <div className="trackOverviewPage__meta">
-              <span><Clock size={14} /> Estimated length: {stats.totalTime}</span>
+              <span><Clock size={14} /> {stats.totalTime}</span>
               <span><LayoutList size={14} /> {stats.totalExercises} exercises</span>
+              <span>{stats.progressPercent}% complete</span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Main Content Layout */}
-      <section className="trackOverviewPage__main container">
-        {/* Left curriculum column */}
+      {/* ═══════════════════ MAIN CONTENT ═══════════════════ */}
+      <section className="trackOverviewPage__main">
+        {/* Left — Curriculum Timeline */}
         <div className="trackOverviewPage__curriculum">
           {track.sections && track.sections.length > 0 ? (
-            <div className="trackOverviewPage__accordionGroup">
-              <div className="trackOverviewPage__sectionNav" aria-label="Jump to section">
-                {track.sections.map((section, index) => {
-                  const isExpanded = expandedSections[section.id] !== false;
-
-                  return (
-                    <button
-                      key={`nav-${section.id}`}
-                      className={`trackOverviewPage__sectionPill ${isExpanded ? "is-active" : ""}`}
-                      onClick={() => openSection(section.id)}
-                    >
-                      {index + 1}. {section.title}
-                    </button>
-                  );
-                })}
-              </div>
-
+            <div className="trackOverviewPage__timeline">
               {track.sections.map((section, index) => {
-                const isExpanded = expandedSections[section.id] !== false; // default to open
-                const sectionNumber = index + 1;
+                const isExpanded = expandedSections[section.id] !== false;
+                const chapterState = getChapterState(section);
                 const totalExercises = section.exercises?.length || 0;
                 const completedInSection = (section.exercises || []).filter((exercise) =>
                   completedExerciseIds.includes(Number(exercise.id))
                 ).length;
-                
+                const sectionProgress = totalExercises > 0
+                  ? Math.round((completedInSection / totalExercises) * 100)
+                  : 0;
+
                 return (
                   <div
                     key={section.id}
@@ -280,35 +273,61 @@ export default function TrackOverviewPage() {
                         sectionRefs.current[section.id] = node;
                       }
                     }}
-                    className={`trackOverviewPage__accordion ${isExpanded ? "is-expanded" : ""}`}
+                    className="trackOverviewPage__chapter"
+                    style={{ "--chapter-index": index }}
                   >
-                    <button 
-                      className={`trackOverviewPage__accordionHeader ${isExpanded ? 'is-expanded' : ''}`}
+                    {/* Timeline node */}
+                    <div className={`trackOverviewPage__chapterNode trackOverviewPage__chapterNode--${chapterState}`}>
+                      {chapterState === "completed" ? (
+                        <CheckCircle2 size={18} />
+                      ) : (
+                        index + 1
+                      )}
+                    </div>
+
+                    {/* Chapter header */}
+                    <button
+                      className={`trackOverviewPage__chapterHeader ${isExpanded ? "is-expanded" : ""}`}
                       onClick={() => toggleSection(section.id)}
                       aria-expanded={isExpanded}
-                      aria-controls={`section-panel-${section.id}`}
-                      id={`section-button-${section.id}`}
+                      aria-controls={`chapter-panel-${section.id}`}
+                      id={`chapter-btn-${section.id}`}
                     >
-                      <div className="trackOverviewPage__accordionTitleGroup">
-                        <div className="trackOverviewPage__accordionNumber">{sectionNumber}</div>
-                        <h3>{section.title}</h3>
+                      <div className="trackOverviewPage__chapterTitleGroup">
+                        <h3 className="trackOverviewPage__chapterTitle">{section.title}</h3>
+                        <div className="trackOverviewPage__chapterMeta">
+                          <span>{totalExercises} {totalExercises === 1 ? "exercise" : "exercises"}</span>
+                          {completedInSection > 0 && (
+                            <span className={`progress-label ${sectionProgress >= 100 ? "is-complete" : ""}`}>
+                              {completedInSection}/{totalExercises} done
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="trackOverviewPage__accordionRight">
-                        <span className="trackOverviewPage__accordionProgress">
-                          {completedInSection}/{totalExercises} done
-                        </span>
-                        <span className="trackOverviewPage__accordionCount">{totalExercises} {totalExercises === 1 ? 'exercise' : 'exercises'}</span>
-                        <ChevronDown size={20} className={`trackOverviewPage__accordionChevron ${isExpanded ? "is-open" : ""}`} />
+
+                      <div className="trackOverviewPage__chapterRight">
+                        {/* Mini progress bar */}
+                        <div className="trackOverviewPage__chapterProgressBar">
+                          <div
+                            className={`trackOverviewPage__chapterProgressFill ${sectionProgress >= 100 ? "is-complete" : ""}`}
+                            style={{ width: `${sectionProgress}%` }}
+                          />
+                        </div>
+                        <ChevronDown
+                          size={18}
+                          className={`trackOverviewPage__chapterChevron ${isExpanded ? "is-open" : ""}`}
+                        />
                       </div>
                     </button>
 
+                    {/* Exercise panel */}
                     <div
-                      className={`trackOverviewPage__accordionBody ${isExpanded ? "is-expanded" : ""}`}
-                      id={`section-panel-${section.id}`}
+                      className={`trackOverviewPage__exercisePanel ${isExpanded ? "is-expanded" : ""}`}
+                      id={`chapter-panel-${section.id}`}
                       role="region"
-                      aria-labelledby={`section-button-${section.id}`}
+                      aria-labelledby={`chapter-btn-${section.id}`}
                     >
-                      <div className="trackOverviewPage__accordionContent">
+                      <div className="trackOverviewPage__exercisePanelInner">
                         {totalExercises > 0 ? (
                           <div className="trackOverviewPage__exerciseList">
                             {section.exercises.map((exercise, idx) => {
@@ -317,26 +336,44 @@ export default function TrackOverviewPage() {
                               return (
                                 <div
                                   key={exercise.id}
-                                  className={`trackOverviewPage__exerciseItem ${isCompleted ? 'is-completed' : ''}`}
-                                  style={{ "--exercise-order": idx + 1 }}
+                                  className={`trackOverviewPage__exerciseCard ${isCompleted ? "is-completed" : ""}`}
+                                  style={{ "--ex-index": idx }}
+                                  onClick={() => handleGoToExercise(exercise.id, section.title, exercise.title)}
                                 >
-                                  <div className="trackOverviewPage__exerciseItemLeft">
-                                    <span className="trackOverviewPage__exerciseNumber">Exercise {idx + 1}</span>
-                                    <span className="trackOverviewPage__exerciseTitle">{exercise.title}</span>
+                                  <div className="trackOverviewPage__exerciseCardLeft">
+                                    <div className={`trackOverviewPage__exerciseIndex trackOverviewPage__exerciseIndex--${isCompleted ? "done" : "pending"}`}>
+                                      {isCompleted ? <CheckCircle2 size={14} /> : idx + 1}
+                                    </div>
+
+                                    <div className="trackOverviewPage__exerciseInfo">
+                                      <span className="trackOverviewPage__exerciseLabel">
+                                        Exercise {idx + 1}
+                                      </span>
+                                      <span className="trackOverviewPage__exerciseName">
+                                        {exercise.title}
+                                      </span>
+                                    </div>
                                   </div>
-                                  
-                                  <button 
-                                    className={`trackOverviewPage__exerciseAction ${isCompleted ? 'action-done' : 'action-start'}`}
-                                    onClick={() => handleGoToExercise(exercise.id, section.title, exercise.title)}
+
+                                  <button
+                                    className={`trackOverviewPage__exerciseBadge trackOverviewPage__exerciseBadge--${isCompleted ? "review" : "start"}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleGoToExercise(exercise.id, section.title, exercise.title);
+                                    }}
                                   >
-                                    {isCompleted ? 'Review' : 'Start'}
+                                    {isCompleted ? (
+                                      <><RotateCcw size={12} /> Review</>
+                                    ) : (
+                                      <><Play size={12} /> Start</>
+                                    )}
                                   </button>
                                 </div>
                               );
                             })}
                           </div>
                         ) : (
-                          <div className="trackOverviewPage__emptyBox">No exercises perfectly linked yet.</div>
+                          <div className="trackOverviewPage__emptyBox">No exercises linked yet.</div>
                         )}
                       </div>
                     </div>
@@ -349,38 +386,65 @@ export default function TrackOverviewPage() {
           )}
         </div>
 
-        {/* Right sidebar column */}
+        {/* ═══════════════════ RIGHT SIDEBAR ═══════════════════ */}
         <aside className="trackOverviewPage__sidebar">
-          {/* Progress Box */}
+          {/* Progress Widget */}
           <div className="trackOverviewPage__widget">
             <h4 className="trackOverviewPage__widgetTitle">Course Progress</h4>
-            <div className="trackOverviewPage__progressRow">
-              <span>Exercises</span>
-              <span>{stats.completedExercises} / {stats.totalExercises}</span>
+
+            <div className="trackOverviewPage__donutWrap">
+              <div
+                className={`trackOverviewPage__donut ${stats.isComplete ? "is-complete" : ""}`}
+                style={{ "--donut-value": `${stats.progressPercent}%` }}
+              >
+                <div className="trackOverviewPage__donutInner">
+                  <span className="trackOverviewPage__donutPercent">
+                    {stats.isComplete ? (
+                      <CheckCircle2 size={22} className="done-icon" />
+                    ) : (
+                      `${stats.progressPercent}%`
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              <div className="trackOverviewPage__progressStats">
+                <div className="trackOverviewPage__progressStatsItem">
+                  <strong>{stats.completedExercises}</strong> of <strong>{stats.totalExercises}</strong> exercises
+                </div>
+                <div className="trackOverviewPage__progressStatsItem">
+                  <Clock size={12} /> Est. {stats.totalTime}
+                </div>
+              </div>
             </div>
-            <div className="trackOverviewPage__progressBar">
-              <div 
-                className="trackOverviewPage__progressFill" 
+
+            <div className="trackOverviewPage__progressLinear">
+              <div
+                className={`trackOverviewPage__progressLinearFill ${stats.isComplete ? "is-complete" : ""}`}
                 style={{ width: `${stats.progressPercent}%` }}
               />
             </div>
           </div>
 
-          <div className="trackOverviewPage__widget trackOverviewPage__badgesWidget">
+          {/* Badges Widget */}
+          <div className="trackOverviewPage__widget">
             <h4 className="trackOverviewPage__widgetTitle">Course Badges</h4>
-            <p className="trackOverviewPage__widgetHelp">Complete chapters to earn a badge — collect 'em all!</p>
+            <p className="trackOverviewPage__widgetHelp">Complete chapters to unlock badges — collect them all!</p>
             <div className="trackOverviewPage__badgeGrid">
-              <div className="trackOverviewPage__badge icon-badge locked"><LockKeyhole size={18}/></div>
-              <div className="trackOverviewPage__badge icon-badge locked"><LockKeyhole size={18}/></div>
-              <div className="trackOverviewPage__badge icon-badge locked"><LockKeyhole size={18}/></div>
-              <div className="trackOverviewPage__badge icon-badge locked"><LockKeyhole size={18}/></div>
+              <div className="trackOverviewPage__badge locked"><LockKeyhole size={16} /></div>
+              <div className="trackOverviewPage__badge locked"><LockKeyhole size={16} /></div>
+              <div className="trackOverviewPage__badge locked"><LockKeyhole size={16} /></div>
+              <div className="trackOverviewPage__badge locked"><LockKeyhole size={16} /></div>
             </div>
           </div>
 
+          {/* Help Widget */}
           <div className="trackOverviewPage__widget">
             <h4 className="trackOverviewPage__widgetTitle">Need Help?</h4>
             <p className="trackOverviewPage__widgetHelp">Ask questions in our community discord!</p>
-            <a href="#" className="btn btn-outline trackOverviewPage__communityBtn">Join Community</a>
+            <a href="#" className="trackOverviewPage__communityBtn">
+              <MessageCircle size={14} /> Join Community
+            </a>
           </div>
         </aside>
       </section>
