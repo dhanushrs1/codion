@@ -1104,9 +1104,6 @@ async def evaluate_task(
             "total_cases": len(test_cases)
         }
 
-
-
-
 @router.post("/progress/task/{task_id}", response_model=schemas.UserTaskProgressResponse)
 async def mark_task_completed(
     task_id: int,
