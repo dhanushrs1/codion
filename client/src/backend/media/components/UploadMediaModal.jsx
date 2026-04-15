@@ -16,7 +16,7 @@ import { uploadMediaFiles } from "../../../shared/mediaApi.js";
 import "./UploadMediaModal.css";
 
 // ── Constants ──────────────────────────────────────────────────────────────
-const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_EXTENSIONS = new Set([
   ".jpg", ".jpeg", ".jfif", ".pjpeg", ".avif",
   ".png", ".webp", ".gif", ".bmp", ".svg",
@@ -58,7 +58,7 @@ function validateFile(file) {
     return `"${file.name}" has an unsupported file type (${ext}).`;
   }
   if (file.size > MAX_FILE_SIZE_BYTES) {
-    return `"${file.name}" exceeds the 25 MB size limit (${formatBytes(file.size)}).`;
+    return `"${file.name}" exceeds the 5 MB size limit (${formatBytes(file.size)}).`;
   }
   if (file.size === 0) {
     return `"${file.name}" is empty and cannot be uploaded.`;
@@ -297,7 +297,7 @@ export default function UploadMediaModal({ isOpen, onClose, onUploaded, storageT
         <div className="umm-header">
           <div className="umm-header__info">
             <h3>Upload Media</h3>
-            <p>Images, videos, audio &amp; documents. Max 25 MB per file.</p>
+            <p>Images, videos, audio &amp; documents. Max 5 MB per file.</p>
           </div>
           <button
             type="button"

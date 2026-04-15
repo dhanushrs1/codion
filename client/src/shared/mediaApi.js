@@ -51,13 +51,15 @@ async function parseErrorResponse(res, fallback) {
 
 /**
  * List all media files, with optional search query and category filter.
- * @param {{ query?: string, category?: string }} options
+ * @param {{ query?: string, category?: string, skip?: number, limit?: number }} options
  * @returns {Promise<{ items: object[] }>}
  */
-export async function listMedia({ query = "", category = "" } = {}) {
+export async function listMedia({ query = "", category = "", skip = 0, limit = 30 } = {}) {
   const params = new URLSearchParams();
   if (query && query.trim()) params.set("q", query.trim());
   if (category && category !== "all") params.set("category", category);
+  params.set("skip", skip.toString());
+  params.set("limit", limit.toString());
 
   const suffix = params.size ? `?${params.toString()}` : "";
   const res = await fetch(apiUrl(`/api/admin/media${suffix}`), {
@@ -205,4 +207,19 @@ export async function testMediaStorageSettings(payload) {
   }
 
   return res.json();
+}
+
+/**
+ * Returns a Cloudinary URL optimized for performance (auto format, reduced quality, specific width)
+ * Only affects images that are stored on Cloudinary.
+ * @param {string} url - Original URL
+ * @param {string} category - Media category
+ * @param {number} width - Max width constraint
+ * @returns {string}
+ */
+export function getOptimizedCloudinaryUrl(url, category = "image", width = 400) {
+  if (category !== "image" || !url || !url.includes("cloudinary.com/")) {
+    return url;
+  }
+  return url.replace("/upload/", `/upload/f_auto,q_auto,w_${width}/`);
 }

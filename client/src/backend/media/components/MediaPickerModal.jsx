@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { X, Search, Image as ImageIcon, CheckCircle, Upload } from "lucide-react";
-import { getMediaStorageSettings, listMedia } from "../../../shared/mediaApi.js";
+import { getMediaStorageSettings, listMedia, getOptimizedCloudinaryUrl } from "../../../shared/mediaApi.js";
 import UploadMediaModal from "./UploadMediaModal.jsx";
 import "./MediaPickerModal.css";
 
@@ -14,10 +14,15 @@ export default function MediaPickerModal({ isOpen, onClose, onSelect }) {
   const [storageTargetLabel, setStorageTargetLabel] = useState("Cloudinary CDN");
   
   const [showUpload, setShowUpload] = useState(false);
+  const [skip, setSkip] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const LIMIT = 30;
 
   useEffect(() => {
     if (isOpen && !showUpload) {
-      fetchMedia();
+      setSkip(0);
+      setHasMore(true);
+      fetchMedia(0);
       void fetchStorageTarget();
     }
   }, [isOpen, category, query, showUpload]);
@@ -32,16 +37,22 @@ export default function MediaPickerModal({ isOpen, onClose, onSelect }) {
     }
   }
 
-  async function fetchMedia() {
-    setLoading(true);
+  async function fetchMedia(currentSkip = 0) {
+    if (currentSkip === 0) setLoading(true);
     setError("");
     try {
-      const res = await listMedia({ query, category });
-      setItems(res?.items || []);
+      const res = await listMedia({ query, category, skip: currentSkip, limit: LIMIT });
+      if (currentSkip === 0) {
+        setItems(res?.items || []);
+      } else {
+        setItems(prev => [...prev, ...(res?.items || [])]);
+      }
+      setHasMore((res?.items?.length || 0) === LIMIT);
+      setSkip(currentSkip);
     } catch (err) {
       setError(err.message || "Failed to load media.");
     } finally {
-      setLoading(false);
+      if (currentSkip === 0) setLoading(false);
     }
   }
 
@@ -99,7 +110,7 @@ export default function MediaPickerModal({ isOpen, onClose, onSelect }) {
                   >
                     <div className="mp-card__img-wrapper">
                       {item.category === "image" ? (
-                        <img src={item.url} alt={item.original_filename} loading="lazy" />
+                        <img src={getOptimizedCloudinaryUrl(item.url, item.category, 400)} alt={item.original_filename} loading="lazy" />
                       ) : (
                         <div className="mp-card__fallback">
                           <ImageIcon size={32} />
@@ -117,6 +128,16 @@ export default function MediaPickerModal({ isOpen, onClose, onSelect }) {
                   </div>
                 );
               })}
+            </div>
+          )}
+          {hasMore && !loading && items.length > 0 && (
+            <div style={{ textAlign: "center", padding: "16px 0" }}>
+              <button 
+                className="mp-btn mp-btn--ghost" 
+                onClick={() => fetchMedia(skip + LIMIT)}
+              >
+                Load More
+              </button>
             </div>
           )}
         </div>

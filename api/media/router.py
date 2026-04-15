@@ -33,7 +33,7 @@ from media.storage_provider import (
 router = APIRouter(tags=["media"])
 
 ELEVATED_ROLES = {"ADMIN", "EDITOR"}
-MAX_MEDIA_FILE_BYTES = 25 * 1024 * 1024
+MAX_MEDIA_FILE_BYTES = 5 * 1024 * 1024
 ALLOWED_MEDIA_CONTENT_TYPES = {
     "image/jpeg",
     "image/jpg",
@@ -273,6 +273,8 @@ async def test_media_storage_settings(
 async def list_media(
     q: str = Query(default="", max_length=120),
     category: str = Query(default="", max_length=32),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=30, le=100),
     _admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, list[dict[str, Any]]]:
@@ -283,6 +285,8 @@ async def list_media(
         search = f"%{q}%"
         stmt = stmt.where(MediaFile.filename.ilike(search) | MediaFile.original_filename.ilike(search))
         
+    stmt = stmt.offset(skip).limit(limit)
+    
     result = await db.execute(stmt)
     rows = result.scalars().all()
     

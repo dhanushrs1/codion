@@ -16,7 +16,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { deleteMediaFile, getMediaStorageSettings, listMedia } from "../../shared/mediaApi.js";
+import { deleteMediaFile, getMediaStorageSettings, listMedia, getOptimizedCloudinaryUrl } from "../../shared/mediaApi.js";
 import UploadMediaModal from "./components/UploadMediaModal.jsx";
 import "./MediaLibraryPage.css";
 
@@ -75,7 +75,7 @@ function MediaPreview({ item, size = 24 }) {
   if (item.category === "image" && item.url && !imgError) {
     return (
       <img
-        src={item.url}
+        src={getOptimizedCloudinaryUrl(item.url, item.category, 600)}
         alt={item.filename || ""}
         className="ml-preview"
         onError={() => setImgError(true)}
@@ -293,6 +293,7 @@ const FILTER_TABS = [
 export default function MediaLibraryPage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -303,6 +304,10 @@ export default function MediaLibraryPage() {
   const [deletingKey, setDeletingKey] = useState("");
   const [viewMode, setViewMode] = useState("grid");
   const [storageTargetLabel, setStorageTargetLabel] = useState("Cloudinary CDN");
+  
+  const [skip, setSkip] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const LIMIT = 30;
 
   const debounceTimer = useRef(null);
 
@@ -313,7 +318,9 @@ export default function MediaLibraryPage() {
   }, [query]);
 
   useEffect(() => {
-    void loadMedia(false);
+    setSkip(0);
+    setHasMore(true);
+    void loadMedia(false, 0);
   }, [debouncedQuery, category]);
 
   useEffect(() => {
@@ -330,18 +337,27 @@ export default function MediaLibraryPage() {
     }
   }
 
-  async function loadMedia(isRefresh = false) {
+  async function loadMedia(isRefresh = false, currentSkip = 0) {
     if (isRefresh) setRefreshing(true);
-    else setLoading(true);
+    else if (currentSkip === 0) setLoading(true);
+    else setLoadingMore(true);
+    
     setError("");
     try {
-      const res = await listMedia({ query: debouncedQuery, category });
-      setItems(res.items || []);
+      const res = await listMedia({ query: debouncedQuery, category, skip: currentSkip, limit: LIMIT });
+      if (currentSkip === 0) {
+        setItems(res.items || []);
+      } else {
+        setItems(prev => [...prev, ...(res.items || [])]);
+      }
+      setHasMore((res.items?.length || 0) === LIMIT);
+      setSkip(currentSkip);
     } catch (err) {
       setError(err.message || "Failed to load media.");
     } finally {
-      setLoading(false);
+      if (currentSkip === 0) setLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
     }
   }
 
@@ -376,7 +392,11 @@ export default function MediaLibraryPage() {
       <UploadMediaModal
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
-        onUploaded={() => void loadMedia(true)}
+        onUploaded={() => {
+          setSkip(0);
+          setHasMore(true);
+          void loadMedia(true, 0);
+        }}
         storageTargetLabel={storageTargetLabel}
       />
 
@@ -390,7 +410,11 @@ export default function MediaLibraryPage() {
           <button
             type="button"
             className="ml-btn ml-btn--ghost ml-btn--icon"
-            onClick={() => void loadMedia(true)}
+            onClick={() => {
+              setSkip(0);
+              setHasMore(true);
+              void loadMedia(true, 0);
+            }}
             disabled={refreshing || loading}
             title="Refresh"
           >
@@ -536,6 +560,19 @@ export default function MediaLibraryPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Load More Button */}
+      {hasMore && !loading && items.length > 0 && (
+        <div style={{ textAlign: "center", padding: "20px 0" }}>
+           <button 
+             className="ml-btn ml-btn--ghost" 
+             onClick={() => loadMedia(false, skip + LIMIT)}
+             disabled={loadingMore}
+           >
+             {loadingMore ? "Loading..." : "Load More"}
+           </button>
         </div>
       )}
     </div>
